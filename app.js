@@ -32,7 +32,7 @@ const TABS={student:[["dash","My learning"],["videos","Video lectures"],["materi
  teacher:[["overview","Students"],["videos","Video lectures"],["materials","Materials"],["unlock","Unlock skills"],["assess","Assess"],["live","Live class"]],
  researcher:[["research","Research"],["cohort","Cohort"],["setup","Setup"],["data","Data"],["overview","Students"],["unlock","Unlock skills"],["assess","Assess"],["videos","Video lectures"],["materials","Materials"],["live","Live class"]],
  guide:[["research","Research"],["cohort","Cohort"],["data","Data"]]};
-const ROLE_NAME={student:"Student",teacher:"Teacher",researcher:"Researcher",guide:"Research guide"};
+const ROLE_NAME={student:"Student",teacher:"Professor",researcher:"Researcher",guide:"Researcher"};
 
 const URLH=new URLSearchParams(location.hash.slice(1));let RECOVERY=URLH.get("type")==="recovery",BOOTED=false;
 const AUTH_ERR=URLH.get("error_description");
@@ -214,6 +214,7 @@ async function render(){
   else if(S.page==="newpass")a.innerHTML=newPassPage();
   else if(S.page==="register")a.innerHTML=registerPage();
   else if(S.page==="join")a.innerHTML=joinPage();
+  else if(S.page==="play")a.innerHTML=playPage();
   else if(S.page==="app"){
    if(!user){go("login");return}
    if(!TABS[role()]?.some(t=>t[0]===S.tab)&&!(role()==="student"&&["test","anx"].includes(S.tab)))S.tab=homeTab();
@@ -226,7 +227,7 @@ async function render(){
 
 /* ------------------------------------------------------------- landing + auth */
 function landingHome(){
- return `<div class="hero"><div><div class="eyebrow">ENGLISH LANGUAGE LEARNING &amp; RESEARCH PLATFORM</div><h1>Learn, practise and grow across six English skills.</h1><p>Interactive lessons, teacher-guided progression, weekly assessment and personal feedback, built for undergraduate learners.</p><div class="actions"><button class="primary" data-act="nav" data-k="register">Register as a student</button><button class="soft" data-act="nav" data-k="login">Student login</button><button class="soft" data-act="nav" data-k="framework">Explore 6 skills →</button></div></div><div class="orb"><svg viewBox="0 0 180 180" width="150" height="150" fill="none"><circle class="orbit-slow" cx="90" cy="90" r="72" stroke="rgba(255,255,255,0.5)" stroke-width="1.5" stroke-dasharray="8 6"/><circle class="orbit-reverse" cx="90" cy="90" r="50" stroke="rgba(94,234,212,0.55)" stroke-width="1.5"/><path class="wave-float" d="M46 94 Q68 74 90 94 T134 94" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg></div></div>
+ return `<div class="hero"><div><div class="eyebrow">ENGLISH LANGUAGE LEARNING &amp; RESEARCH PLATFORM</div><h1>Learn, practise and grow across six English skills.</h1><p>Interactive lessons, professor-guided progression, weekly assessment and personal feedback, built for undergraduate learners.</p><div class="actions"><button class="primary" data-act="nav" data-k="register">Register as a student</button><button class="soft" data-act="nav" data-k="login">Student login</button><button class="soft" data-act="nav" data-k="framework">Explore 6 skills →</button></div></div><div class="orb"><svg viewBox="0 0 180 180" width="150" height="150" fill="none"><circle class="orbit-slow" cx="90" cy="90" r="72" stroke="rgba(255,255,255,0.5)" stroke-width="1.5" stroke-dasharray="8 6"/><circle class="orbit-reverse" cx="90" cy="90" r="50" stroke="rgba(94,234,212,0.55)" stroke-width="1.5"/><path class="wave-float" d="M46 94 Q68 74 90 94 T134 94" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg></div></div>
 
  <div class="live-telemetry" aria-label="Live date, time, weather and location">
    <div class="tele-item"><div class="tele-icon">📅</div><div><small>Date</small><strong id="liveDate">--</strong></div></div>
@@ -388,7 +389,7 @@ async function dash(){
   const st=skillStatus(k);let btn="";
   const kind=ph==="intervention"?"weekly":ph,done=mine.att.find(x=>x.skill===k&&x.kind===kind&&(kind!=="weekly"||x.week===settings.week));
   if(ph==="intervention"){
-   if(!unlockedFor(k))btn='<span class="muted small">Waiting for your teacher to unlock</span>';
+   if(!unlockedFor(k))btn='<span class="muted small">Waiting for your professor to unlock</span>';
    else btn=`<button class="soft" data-act="mat" data-k="${k}">Materials</button> `+(done?'<span class="muted small">This week done ✓</span>':`<button class="primary" data-act="start" data-k="${k}" data-kind="weekly">Weekly test (week ${settings.week})</button>`);
   }else btn=done?`<span class="muted small">${phName} submitted ✓</span>`:`<button class="primary" data-act="start" data-k="${k}" data-kind="${ph}">Start ${phName.toLowerCase()}</button>`;
   const sc=latest(k),glowCls=sc==null?"":(sc>=60?" glow-good":" glow-low");
@@ -439,7 +440,7 @@ Object.assign(FORM,{
   const r=await db.from("attempts").insert(row).select("id").single();
   if(r.error)return toast(r.error.code==="23505"?"You have already submitted this test.":r.error.message);
   if(fb)await db.from("feedback").insert({attempt_id:r.data.id,student_id:user.id,skill,band:fb.band,body:fb.body,recommendation:fb.recommendation,source:"auto"});
-  rec={};toast(row.status==="pending"?"Submitted. Your teacher will score it.":"Submitted. Feedback is ready.");if(row.status==="scored"){const good=row.pct>=60;playFeedbackSound(good);showQuoteModal(good?"good":"low",`${Math.round(row.pct)}% in ${skill}`);}S.test=null;go("app",row.status==="pending"?"dash":"feedback")},
+  rec={};toast(row.status==="pending"?"Submitted. Your professor will score it.":"Submitted. Feedback is ready.");if(row.status==="scored"){const good=row.pct>=60;playFeedbackSound(good);showQuoteModal(good?"good":"low",`${Math.round(row.pct)}% in ${skill}`);}S.test=null;go("app",row.status==="pending"?"dash":"feedback")},
  async anx(f,d){
   const items=ANX.map((_,i)=>+d.get("a"+i));
   const total=items.reduce((s,v,i)=>s+(ANX_REVERSE.includes(i)?6-v:v),0);
@@ -468,7 +469,7 @@ Object.assign(FORM,{async material(f,d){
 
 async function feedbackTab(){
  await loadMine();
- return `<div class="head"><div class="eyebrow">FEEDBACK</div><h1>Your feedback</h1></div>${mine.fb.map(x=>`<div class="card" style="margin-bottom:12px"><div class="row"><h3>${x.skill}</h3><span class="badge">${esc(x.band||"")}</span></div><p>${esc(x.body)}</p>${x.recommendation?`<p><b>Next step:</b> ${esc(x.recommendation)}</p>`:""}${x.teacher_remark?`<p><b>Teacher remark:</b> ${esc(x.teacher_remark)}</p>`:""}<small class="muted">${new Date(x.created_at).toLocaleDateString()}</small></div>`).join("")||'<div class="empty">No feedback yet. Complete a test to see it here.</div>'}`;
+ return `<div class="head"><div class="eyebrow">FEEDBACK</div><h1>Your feedback</h1></div>${mine.fb.map(x=>`<div class="card" style="margin-bottom:12px"><div class="row"><h3>${x.skill}</h3><span class="badge">${esc(x.band||"")}</span></div><p>${esc(x.body)}</p>${x.recommendation?`<p><b>Next step:</b> ${esc(x.recommendation)}</p>`:""}${x.teacher_remark?`<p><b>Professor remark:</b> ${esc(x.teacher_remark)}</p>`:""}<small class="muted">${new Date(x.created_at).toLocaleDateString()}</small></div>`).join("")||'<div class="empty">No feedback yet. Complete a test to see it here.</div>'}`;
 }
 const chpwCard=()=>`<form data-form="chpw" class="card stack" style="margin-top:16px"><h3>Change password</h3><div class="form-grid"><label>New password (at least 6 characters)<input name="p1" type="password" minlength="6" required autocomplete="new-password"></label><label>Type it again<input name="p2" type="password" minlength="6" required autocomplete="new-password"></label></div><button class="soft">Change password</button></form>`;
 async function profileTab(){return (await profileTab0())+chpwCard()}
@@ -550,7 +551,7 @@ async function refreshResults(){
  $("feed").innerHTML=rows.slice(-8).reverse().map(r=>`<div class="activity"><div class="info"><b>${esc(r.participant_name||"Anonymous")}</b><small>${esc(r.answer)}</small></div></div>`).join("");
 }
 function joinPage(inApp){
- return `${inApp?'<div class="head"><div class="eyebrow">LIVE CLASSROOM</div><h1>Join a live activity</h1></div>':'<div class="head"><div class="eyebrow">AUDIENCE</div><h1>Join the conversation</h1><p>Enter the six-digit code from your presenter.</p></div>'}<div class="card stack" style="max-width:560px"><label>Session code<input id="joinCode" inputmode="numeric" maxlength="6" placeholder="482913" style="font:800 28px Manrope;letter-spacing:7px;text-align:center"></label><label>Your name<input id="displayName" value="${esc(profile?.full_name||"")}" placeholder="Optional for guests"></label><button class="primary" data-act="lookup">Find session</button><div id="participant"></div></div>`;
+ return `${inApp?'<div class="head"><div class="eyebrow">LIVE CLASSROOM</div><h1>Join a live activity</h1></div>':'<div class="head"><div class="eyebrow">AUDIENCE</div><h1>Join the conversation</h1><p>Enter the six-digit code from your presenter.</p></div>'}<div class="card stack" style="max-width:560px"><label>Session code<input id="joinCode" inputmode="numeric" maxlength="6" placeholder="482913" style="font:800 28px Manrope;letter-spacing:7px;text-align:center"></label><label>Your name<input id="displayName" value="${esc(profile?.full_name||"")}" placeholder="Needed to join a live quiz" maxlength="40"></label><button class="primary" data-act="lookup">Join</button><p class="muted small">Works for live quizzes and live polls. You do not need to log in.</p><div id="participant"></div></div>`;
 }
 Object.assign(FORM,{});
 
@@ -559,8 +560,8 @@ async function cohortTab(){
  const [st,tch,asg]=await Promise.all([roster(),ok(db.from("profiles").select("id,full_name,email,role").in("role",["teacher"])),ok(db.from("teacher_assignments").select("*"))]);
  const can=role()==="researcher";
  return `<div class="head"><div class="eyebrow">COHORT · IDENTITY RECORDS</div><h1>${st.length} student(s)</h1><p>Verify a student to assign a research ID. Identity details stay on this screen; exports use research IDs only.</p></div>
- <div class="card" style="overflow:auto"><table><thead><tr><th>Name</th><th>Mobile</th><th>Email</th><th>Year</th><th>College</th><th>Student no.</th><th>Research ID</th><th>Consent</th><th>Teacher</th></tr></thead><tbody>${st.map(s=>{const a=asg.find(x=>x.student_id===s.id);return `<tr><td>${esc(s.full_name)}</td><td>${esc(s.mobile)}</td><td>${esc(s.email)}</td><td>${s.sp.year||"-"}</td><td>${esc(s.sp.college)}</td><td>${esc(s.sp.student_no)}</td><td>${s.sp.research_id?esc(s.sp.research_id):(can?`<button class="soft" data-act="verify" data-id="${s.id}">Verify</button>`:"-")}</td><td>${s.sp.consent_research?"✓":"✗"}</td><td>${can?`<select data-chg="assign" data-id="${s.id}"><option value="">-</option>${tch.map(t=>`<option value="${t.id}" ${a?.teacher_id===t.id?"selected":""}>${esc(t.full_name||t.email)}</option>`).join("")}</select>`:(tch.find(t=>t.id===a?.teacher_id)?.full_name||"-")}</td></tr>`}).join("")||'<tr><td colspan="9" class="muted">No registrations yet.</td></tr>'}</tbody></table></div>
- ${can?`<form data-form="role" class="card stack" style="margin-top:14px"><b>Grant a role to a registered account</b><div class="form-grid"><label>Account email<input name="email" type="email" required></label><label>Role<select name="role"><option value="teacher">Teacher</option><option value="guide">Research guide</option><option value="student">Student</option></select></label></div><button class="primary">Set role</button></form>`:""}`;
+ <div class="card" style="overflow:auto"><table><thead><tr><th>Name</th><th>Mobile</th><th>Email</th><th>Year</th><th>College</th><th>Student no.</th><th>Research ID</th><th>Consent</th><th>Professor</th></tr></thead><tbody>${st.map(s=>{const a=asg.find(x=>x.student_id===s.id);return `<tr><td>${esc(s.full_name)}</td><td>${esc(s.mobile)}</td><td>${esc(s.email)}</td><td>${s.sp.year||"-"}</td><td>${esc(s.sp.college)}</td><td>${esc(s.sp.student_no)}</td><td>${s.sp.research_id?esc(s.sp.research_id):(can?`<button class="soft" data-act="verify" data-id="${s.id}">Verify</button>`:"-")}</td><td>${s.sp.consent_research?"✓":"✗"}</td><td>${can?`<select data-chg="assign" data-id="${s.id}"><option value="">-</option>${tch.map(t=>`<option value="${t.id}" ${a?.teacher_id===t.id?"selected":""}>${esc(t.full_name||t.email)}</option>`).join("")}</select>`:(tch.find(t=>t.id===a?.teacher_id)?.full_name||"-")}</td></tr>`}).join("")||'<tr><td colspan="9" class="muted">No registrations yet.</td></tr>'}</tbody></table></div>
+ ${can?`<form data-form="role" class="card stack" style="margin-top:14px"><b>Grant a role to a registered account</b><div class="form-grid"><label>Account email<input name="email" type="email" required></label><label>Role<select name="role"><option value="teacher">Professor</option><option value="researcher">Researcher</option><option value="student">Student</option></select></label></div><button class="primary">Set role</button></form>`:""}`;
 }
 Object.assign(FORM,{async role(f,d){const p=await ok(db.from("profiles").select("id").eq("email",String(d.get("email")).trim()).maybeSingle());if(!p)return toast("No account with that email. Ask them to register first.");await ok(db.rpc("set_role",{p_user:p.id,p_role:d.get("role")}));toast("Role updated.");render()}});
 
@@ -630,6 +631,7 @@ function lineChart(labels,series,{max=100,h=230}={}){
  return s+"</svg>"+legend(series);
 }
 const legend=se=>se.length>1||se[0].name?`<div class="legend">${se.map(x=>`<span><i style="background:${x.color}"></i>${esc(x.name)}</span>`).join("")}</div>`:"";
+const allMean=v=>{v=v.filter(x=>x!=null&&!isNaN(x));return v.length?mean(v):null};
 async function researchTab(){
  const D=synthetic?synth():await realData(),rows=D.rows,PRE="#9aa4d6",POST="#13a99b";
  const ov=(r,w)=>{const v=SK.map(k=>r[w][k]).filter(x=>x!=null);return v.length?mean(v):null};
@@ -648,8 +650,8 @@ async function researchTab(){
  const card=(t,b)=>`<div class="card"><b>${t}</b>${b}</div>`;
  return `<div class="head"><div class="eyebrow">RESEARCH DASHBOARD</div><h1>Analysis</h1><p>${rows.length} verified participant(s) with a research ID. ${synthetic?'<b>Showing a synthetic preview dataset (not real, not saved).</b>':""}</p><div class="actions"><button class="${synthetic?"outline":"soft"}" data-act="syn">${synthetic?"Back to real data":"Preview with synthetic data"}</button></div></div>
  ${rows.length?"":'<div class="notice">No verified participants with data yet. Verify students in Cohort, run the pre-test, or preview with synthetic data.</div>'}
- <div class="chartgrid">${card("1 · Pre-test vs post-test (overall)",barChart(["Overall"],[{name:"Pre",vals:[mean(pairsOverall.map(p=>p[0]))],color:PRE},{name:"Post",vals:[mean(pairsOverall.map(p=>p[1]))],color:POST}]))}
- ${card("2 · Six-skill comparison",barChart(SK,[{name:"Pre",vals:skillStats.map(s=>s.a),color:PRE},{name:"Post",vals:skillStats.map(s=>s.b),color:POST}]))}
+ <div class="chartgrid">${card("1 · Pre-test vs post-test (overall)",barChart(["Overall"],[{name:"Pre",vals:[allMean(rows.map(r=>ov(r,"pre")))],color:PRE},{name:"Post",vals:[allMean(rows.map(r=>ov(r,"post")))],color:POST}])+(pairsOverall.length?"":'<p class="muted small">Bars show every student who has taken each test. Paired statistics appear once students have both a pre-test and a post-test.</p>'))}
+ ${card("2 · Six-skill comparison",barChart(SK,[{name:"Pre",vals:SK.map(k=>allMean(rows.map(r=>r.pre[k]))),color:PRE},{name:"Post",vals:SK.map(k=>allMean(rows.map(r=>r.post[k]))),color:POST}]))}
  ${card("3 · Weekly assessment trend",lineChart(weeks.map(i=>"W"+(i+1)),[{name:"Mean %",vals:wk,color:"#6558d3"}]))}
  ${card("4 · Year-wise comparison",barChart(["Year I","Year II","Year III"],[{name:"Pre",vals:yearMeans("pre"),color:PRE},{name:"Post",vals:yearMeans("post"),color:POST}]))}
  ${card("5 · Score distribution (students per 10-point band)",barChart(bins,[{name:"Pre",vals:hp,color:PRE},{name:"Post",vals:hq,color:POST}],{max:hmax}))}
@@ -700,7 +702,7 @@ async function vpSave(ended){
  if(VP)VP.saving=false}
 async function startPlayer(v,prog,student){
  stopPlayer();const holder=$("ytPlayer");if(!holder)return;
- try{await loadYT()}catch{holder.outerHTML='<div class="notice">The video could not be loaded. Check your internet connection or ask your teacher.</div>';return}
+ try{await loadYT()}catch{holder.outerHTML='<div class="notice">The video could not be loaded. Check your internet connection or ask your professor.</div>';return}
  if(!$("ytPlayer"))return;
  VP={id:v.id,student,cov:[],n:0,last:null,dirty:false,saving:false,done:!!prog?.completed_at,t:null,player:null};
  VP.player=new YT.Player("ytPlayer",{videoId:v.youtube_id,host:"https://www.youtube-nocookie.com",width:"100%",height:"100%",playerVars:{rel:0,modestbranding:1,playsinline:1,origin:location.origin},events:{
@@ -784,7 +786,7 @@ async function liveCard(){
  const r=await liveRow();
  if(role()==="student"){
   if(r?.is_live&&r.url)return `<div class="card livecard on"><div class="row"><div><div class="eyebrow">LIVE NOW</div><h2><span class="dot"></span> ${esc(r.title||"Live class")}</h2><p class="muted">${esc(r.platform||"")} class is running. Join from here. It opens in a new tab and brings you back to this page afterwards.</p></div><button class="primary big-btn" data-act="joinlive" data-url="${esc(r.url)}">Join class</button></div></div>`;
-  return `<div class="card livecard"><div class="eyebrow">LIVE CLASS</div><h3>No class is live right now</h3><p class="muted small">This page updates by itself. When your teacher starts the class, a Join button appears here and on your dashboard.</p></div>`}
+  return `<div class="card livecard"><div class="eyebrow">LIVE CLASS</div><h3>No class is live right now</h3><p class="muted small">This page updates by itself. When your professor starts the class, a Join button appears here and on your dashboard.</p></div>`}
  return `<div class="card livecard${r?.is_live?" on":""}"><div class="row"><div><div class="eyebrow">LIVE CLASS (ZOOM / GOOGLE MEET)</div><h2>${r?.is_live?'<span class="dot"></span> Class is live':"Class is not live"}</h2></div>${r?.url?`<button class="${r.is_live?"outline danger":"primary"}" data-act="golive" data-on="${r.is_live?0:1}">${r.is_live?"End class":"Go live"}</button>`:""}</div>
  <form data-form="livecfg" class="stack"><div class="form-grid"><label>Class title<input name="title" value="${esc(r?.title||"")}" placeholder="e.g. Reading skills, Week 2"></label><label>Meeting link<input name="url" type="url" required value="${esc(r?.url||"")}" placeholder="https://meet.google.com/… or https://zoom.us/j/…"></label></div><button class="soft">Save link</button></form>
  <p class="muted small">Create the meeting in Zoom or Google Meet, paste the link, save, then press <b>Go live</b>. Students see a Join button immediately and the link stays hidden from them until the class is live.</p></div>`}
@@ -826,7 +828,8 @@ const ACT={
    rec.r.onstop=()=>{st.getTracks().forEach(t=>t.stop());rec.blob=new Blob(rec.chunks,{type:rec.r.mimeType||"audio/webm"});const a=$("recAudio");a.src=URL.createObjectURL(rec.blob);a.classList.remove("hidden");el.textContent="● Record again"};
    rec.r.start();el.textContent="■ Stop"}catch(e){toast("Microphone not available. Type a transcript instead.")}},
  async lookup(){
-  const code=$("joinCode").value.trim();const r=await db.rpc("get_public_session",{join_code:code});if(r.error||!r.data?.length)return toast("Session not found.");
+  const code=$("joinCode").value.trim();if(!code)return toast("Type the six-digit code first.");if(await joinLiveQuiz(code))return;
+  const r=await db.rpc("get_public_session",{join_code:code});if(r.error||!r.data?.length)return toast("No live quiz or session found with that code. Check the code with your presenter.");
   const x=r.data[0];if(!x.session_open)return toast("This session is paused.");
   if(!user&&!x.anonymous_allowed){toast("Please log in to join this session.");return go("login")}
   sessionNow={code,activity_type:x.activity_type};const opt=["poll","quiz"].includes(x.activity_type);
@@ -838,7 +841,7 @@ const ACT={
  async pause(el){await ok(db.from("sessions").update({is_open:el.dataset.open==="1"}).eq("id",el.dataset.id));render()},
  async csv(el){const s=await ok(db.from("sessions").select("title,code").eq("id",el.dataset.id).single());const d=await ok(db.from("responses").select("participant_name,answer,is_anonymous,created_at").eq("session_id",el.dataset.id));download(`${s.title}_${s.code}.csv`,[csvLine(["Participant","Answer","Anonymous","Submitted"]),...d.map(r=>csvLine([r.participant_name||"Anonymous",r.answer,r.is_anonymous?"Yes":"No",r.created_at]))].join("\n"))},
 };
-const CHG={unlockStu(el){S.unlockStu=el.value;render()},async assign(el){await ok(db.rpc("assign_teacher",{p_student:el.dataset.id,p_teacher:el.value||null}));toast("Teacher assigned.")}};
+const CHG={unlockStu(el){S.unlockStu=el.value;render()},async assign(el){await ok(db.rpc("assign_teacher",{p_student:el.dataset.id,p_teacher:el.value||null}));toast("Professor assigned.")}};
 
 document.addEventListener("click",async e=>{const el=e.target.closest("[data-act]");if(!el)return;try{await ACT[el.dataset.act]?.(el,e)}catch(err){console.error(err)}});
 document.addEventListener("submit",async e=>{const f=e.target.closest("[data-form]");if(!f)return;e.preventDefault();const b=f.querySelector("button:not([type=button])");if(b)b.disabled=true;try{await FORM[f.dataset.form](f,new FormData(f))}catch(err){console.error(err)}finally{if(b)b.disabled=false}});
@@ -915,15 +918,15 @@ function stepInfo(st){
  return {anx,consent,read:!!pr.process_read_at,
   steps:[
    {k:"pre_questionnaire",n:"Questionnaire",d:"Tell us how you feel about using English. There are no right or wrong answers.",items:[...(anx?[{a:anx,ctx:"pre"}]:[]),...A("pre_questionnaire").map(a=>({a,ctx:""}))],
-    lock:!consent?"Give your consent first.":!o.pre_questionnaire?"Your teacher has not opened this yet.":null,done:consent&&d.pre_questionnaire},
+    lock:!consent?"Give your consent first.":!o.pre_questionnaire?"Your professor has not opened this yet.":null,done:consent&&d.pre_questionnaire},
    {k:"pretest",n:"Pre-test",d:"One test for each skill. It shows your level before the classes begin.",items:A("pretest").map(a=>({a,ctx:""})),
-    lock:!consent?"Give your consent first.":!d.pre_questionnaire?"Finish the questionnaire first.":!o.pretest?"Your teacher has not opened this yet.":null,done:d.pretest&&A("pretest").length>0},
+    lock:!consent?"Give your consent first.":!d.pre_questionnaire?"Finish the questionnaire first.":!o.pretest?"Your professor has not opened this yet.":null,done:d.pretest&&A("pretest").length>0},
    {k:"intervention",n:"Interventions",d:"Flipped-learning sessions with podcasts, videos, graphic novels and mixed media. Each has a quiz with explanations.",items:A("intervention").map(a=>({a,ctx:""})),
-    lock:!d.pretest||!A("pretest").length?"Finish every pre-test first.":!o.intervention?"Your teacher will open the sessions after the pre-test.":null,done:A("intervention").length>0&&A("intervention").every(a=>doneOf(a))},
+    lock:!d.pretest||!A("pretest").length?"Finish every pre-test first.":!o.intervention?"Your professor will open the sessions after the pre-test.":null,done:A("intervention").length>0&&A("intervention").every(a=>doneOf(a))},
    {k:"posttest",n:"Post-test",d:"One final test that covers all the skills.",items:A("posttest").map(a=>({a,ctx:""})),
-    lock:!d.pretest||!A("pretest").length?"Finish every pre-test first.":!o.posttest?"Your teacher will open the post-test at the end of the course.":null,done:d.posttest},
+    lock:!d.pretest||!A("pretest").length?"Finish every pre-test first.":!o.posttest?"Your professor will open the post-test at the end of the course.":null,done:d.posttest},
    {k:"post_questionnaire",n:"Final questionnaire",d:"Your views after the course. This opens once the post-test is submitted.",items:A("post_questionnaire").map(a=>({a,ctx:""})),
-    lock:!d.posttest?"Submit the post-test first.":!o.post_questionnaire?"Your teacher has not opened this yet.":null,done:d.post_questionnaire&&A("post_questionnaire").length>0}]}}
+    lock:!d.posttest?"Submit the post-test first.":!o.post_questionnaire?"Your professor has not opened this yet.":null,done:d.post_questionnaire&&A("post_questionnaire").length>0}]}}
 function itemRow(it,locked,anx){
  const a=it.a,done=doneOf(a,it.ctx),open=attOf(a,it.ctx).find(t=>t.status==="open"),last=attOf(a,it.ctx).filter(t=>t.status==="done").slice(-1)[0];
  const isTest=a.kind!=="questionnaire",learn=a.purpose==="intervention";
@@ -943,14 +946,14 @@ async function researchHome(){
  if(r.view==="run")return RUN.page();
  const [st,banner]=await Promise.all([loadState(),liveBanner()]);const M=journeyModel(st),I=M.I,L=M.list;
  const sel=L.some(x=>x.k===r.sel)?r.sel:L[M.cur].k,S_=L.find(x=>x.k===sel),si=L.indexOf(S_);
- /* live: refresh when a teacher opens a stage or new work is published */
+ /* live: refresh when a professor opens a stage or new work is published */
  stopTimers();const snap=JSON.stringify(st);S.after=()=>every(20000,async()=>{if(S.page!=="app"||S.tab!=="dash"||S.r?.view)return;try{const n=await db.rpc("research_state");if(!n.error&&JSON.stringify(n.data)!==snap)render()}catch{}});
  const tile=(x,i)=>{const state=x.done?"is-done":x.lock?"is-locked":"is-open";
   return `<button type="button" class="ptile ${state} ${i===M.cur&&!M.all?"is-cur":""} ${x.k===sel?"is-sel":""}" data-act="jsel" data-k="${x.k}" aria-pressed="${x.k===sel}"><span class="pconn"><i style="width:${Math.round(100*x.f)}%"></i></span><span class="pnode">${x.done?"✓":x.lock?"🔒":i+1}</span><b>${x.n}</b><span class="pstat">${x.done?"Done":x.lock?"Locked":x.empty?"Coming soon":"Open"}${x.cnt?` · ${x.cnt}`:""}</span></button>`};
  let detail="";
  if(sel==="process")detail=`<p class="muted">See what will happen, step by step, before you agree to take part.</p><button class="${I.read?"soft":"primary"}" data-act="rview" data-v="process">${I.read?"Read again":"See how it works"}</button>`;
  else if(sel==="consent")detail=I.consent?`<p class="muted">You agreed to take part on ${fmtDT(st.progress.consent_at)}. You can withdraw at any time by telling the researcher.</p>`:I.read?`<form data-form="consent" class="stack"><label class="check"><input type="checkbox" name="agree" required> <span>I have read how the research works. I understand that taking part is voluntary, that my scores and answers will be used for research with my name removed, and that I can stop at any time. I agree to take part.</span></label><button class="primary">I agree, continue</button></form>`:'<p class="lockmsg">🔒 Read how the research works first.</p>';
- else detail=`<p class="muted">${S_.d}</p>${S_.lock?`<p class="lockmsg">🔒 ${S_.lock}</p>`:""}${S_.items.length?`<div class="stack">${S_.items.map(it=>itemRow(it,!!S_.lock,I.anx)).join("")}</div>`:'<p class="muted small">Your teacher has not added anything here yet.</p>'}`;
+ else detail=`<p class="muted">${S_.d}</p>${S_.lock?`<p class="lockmsg">🔒 ${S_.lock}</p>`:""}${S_.items.length?`<div class="stack">${S_.items.map(it=>itemRow(it,!!S_.lock,I.anx)).join("")}</div>`:'<p class="muted small">Your professor has not added anything here yet.</p>'}`;
  return `${banner}<div class="head"><div class="eyebrow">${esc(sp?.verified?"Research ID "+sp.research_id:"Research participant")}</div><h1>Hello, ${esc((profile.full_name||"").split(" ")[0])}</h1><p>Your research journey. Complete the steps in order.</p></div>
  <div class="card pcard"><div class="row"><b>${M.all?"All steps complete 🎉":`Step ${M.cur+1} of ${L.length}: ${L[M.cur].n}`}</b><span class="ppct">${M.pct}%</span></div><div class="bar pbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${M.pct}" aria-label="Research progress"><i style="width:${M.pct}%"></i></div>
  <div class="pgrid">${L.map(tile).join("")}</div></div>
@@ -1073,7 +1076,7 @@ async function practiceTab(){
  if(r.view==="run")return RUN.page();
  if(r.view==="cards")return cardsPage(r.id);
  const st=await loadState(),items=st.activities.filter(a=>a.purpose==="practice");
- return `<div class="head"><div class="eyebrow">PRACTICE</div><h1>Flashcards and practice</h1><p>Extra practice from your teachers. These do not count towards the research tests.</p></div>
+ return `<div class="head"><div class="eyebrow">PRACTICE</div><h1>Flashcards and practice</h1><p>Extra practice from your professors. These do not count towards the research tests.</p></div>
  <div class="stack">${items.map(a=>`<div class="card activity"><div class="badge">${KIND[a.kind]}</div><div class="info"><b>${esc(a.title)}</b><div class="muted small">${a.n} ${a.kind==="flashcards"?"cards":"questions"}${a.skill?" · "+a.skill:""}</div></div>${a.kind==="flashcards"?`<button class="primary" data-act="cards" data-id="${a.id}">Open cards</button>`:`<button class="primary" data-act="rstart" data-id="${a.id}" data-ctx="">${attOf(a).some(t=>t.status==="open")?"Continue":"Start"}</button>`}</div>`).join("")||'<div class="empty">No practice sets yet.</div>'}</div>`}
 async function cardsPage(id,preview){
  const a=preview||await ok(db.from("activities").select("*").eq("id",id).single());const r=R();const n=a.cards.length;if(!n)return '<div class="card">This set has no cards yet.</div>';
@@ -1102,7 +1105,7 @@ function edSync(){if(!ED)return;const d=ED.data;document.querySelectorAll("[data
  const f=document.querySelector("form[data-form=edq]");if(f){const fd=new FormData(f);ED.qf={...ED.qf,...Object.fromEntries(fd.entries()),reverse:fd.get("reverse")==="on"}}}
 function shuffleIdx(n){const a=[...Array(n).keys()];for(let i=n-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}if(n>1&&a.every((v,i)=>v===i))[a[0],a[1]]=[a[1],a[0]];return a}
 /* turn the form / an import line into {q (student view), k (hidden key)} */
-function buildQ(f){const t=f.type,ex=(f.explanation||"").trim()||undefined,sk=f.skill||undefined;const need=(v,m)=>{if(!String(v||"").trim())throw new Error(m);return String(v).trim()};
+function buildQ(f){const t=f.type,ex=(f.explanation||"").trim()||undefined,sk=f.skill||undefined,sy=(f.say||"").trim()||undefined;const need=(v,m)=>{if(!String(v||"").trim())throw new Error(m);return String(v).trim()};
  if(t==="likert")return {q:{type:"likert",q:need(f.q,"Type the statement."),...(f.reverse?{reverse:true}:{})},k:{}};
  if(t==="tf"){if(!["0","1",0,1].includes(f.answer))throw new Error("Choose True or False as the answer.");return {q:{type:"tf",q:need(f.q,"Type the statement."),skill:sk,say:sy},k:{answer:+f.answer,explanation:ex}}}
  if(t==="ar"){if(f.answer===""||f.answer==null)throw new Error("Choose the correct option.");return {q:{type:"ar",assertion:need(f.assertion,"Type the assertion."),reason:need(f.reason,"Type the reason."),skill:sk,say:sy},k:{answer:+f.answer,explanation:ex}}}
@@ -1115,15 +1118,65 @@ function qToForm(q,k){if(q.type==="likert")return {type:"likert",q:q.q,reverse:!
  if(q.type==="tf")return {...b,q:q.q,answer:String(k.answer)};if(q.type==="ar")return {...b,assertion:q.assertion,reason:q.reason,answer:String(k.answer)};
  if(q.type==="match")return {...b,q:q.q,pairs:q.left.map((l,i)=>`${l} = ${q.right[k.answer[i]]}`).join("\n")};
  return {...b,q:q.q,o0:q.options[0]||"",o1:q.options[1]||"",o2:q.options[2]||"",o3:q.options[3]||"",answer:String(k.answer)}}
-function parseImport(txt,kind){const out=[],errs=[];String(txt||"").split("\n").map(l=>l.trim()).filter(Boolean).forEach((l,i)=>{const p=l.split("|").map(x=>x.trim()),t=(p[0]||"").toUpperCase();
- try{let f;const L=x=>{const k="ABCD".indexOf(String(x||"").toUpperCase());if(k<0||String(x).length!==1)throw new Error("the answer must be A, B, C or D");return String(k)};
-  if(kind==="questionnaire"){if(t==="LIKERT")f={type:"likert",q:p[1],reverse:/^r/i.test(p[2]||"")};else f={type:"likert",q:p[0],reverse:/^r/i.test(p[1]||"")}}
-  else if(t==="MCQ"){if(p.length<7)throw new Error("needs: MCQ | question | A | B | C | D | answer | explanation");f={type:"mcq",q:p[1],o0:p[2],o1:p[3],o2:p[4],o3:p[5],answer:L(p[6]),explanation:p[7]}}
-  else if(t==="TF"){if(!/^(t|f|true|false)$/i.test(p[2]||""))throw new Error("needs: TF | statement | T or F | explanation");f={type:"tf",q:p[1],answer:/^t/i.test(p[2])?"0":"1",explanation:p[3]}}
-  else if(t==="AR"){f={type:"ar",assertion:p[1],reason:p[2],answer:L(p[3]),explanation:p[4]}}
-  else if(t==="MATCH"){f={type:"match",q:p[1],pairs:p[2],explanation:p[3]}}
-  else throw new Error("start the line with MCQ, TF, AR or MATCH");
-  out.push(buildQ(f))}catch(e){errs.push(`Line ${i+1}: ${e.message}`)}});return {out,errs}}
+/* ---------- importer: pipes, spreadsheet paste (tabs), CSV, or numbered questions with A) B) options ---------- */
+function csvRows(txt,sep){const rows=[];let row=[],cell="",q=false;for(let i=0;i<txt.length;i++){const c=txt[i];
+  if(q){if(c==='"'){if(txt[i+1]==='"'){cell+='"';i++}else q=false}else cell+=c}
+  else if(c==='"'&&cell.trim()==="")q=true;else if(c===sep){row.push(cell);cell=""}else if(c==="\n"){row.push(cell);rows.push(row);row=[];cell=""}else if(c!=="\r")cell+=c}
+ row.push(cell);rows.push(row);return rows.map(r=>r.map(x=>x.trim())).filter(r=>r.some(Boolean))}
+const TYPE_ALIASES={mcq:"mcq",mc:"mcq","multiple choice":"mcq","multiple-choice":"mcq",multiplechoice:"mcq",choice:"mcq",tf:"tf","t/f":"tf","true/false":"tf","true or false":"tf",truefalse:"tf","true false":"tf",ar:"ar","a/r":"ar","assertion":"ar","assertion reason":"ar","assertion and reason":"ar","assertion-reason":"ar","assertion & reason":"ar",match:"match",matching:"match","match the following":"match"};
+const typeOf=x=>TYPE_ALIASES[String(x||"").toLowerCase().replace(/\s+/g," ").trim()];
+function letterOf(ans,opts){const a=String(ans||"").trim().replace(/^(option|ans(wer)?|correct( answer)?)\s*[:.\-]?\s*/i,"").replace(/^[(\[]\s*|\s*[)\].:]\s*$/g,"").trim();
+ if(/^[A-Da-d]$/.test(a))return "ABCD".indexOf(a.toUpperCase());if(/^[1-4]$/.test(a))return +a-1;
+ const m=a.match(/^([A-Da-d])[).:\-]\s/);if(m)return "ABCD".indexOf(m[1].toUpperCase());
+ const i=(opts||[]).findIndex(o=>o&&o.toLowerCase()===a.toLowerCase());return i}
+const tfOf=x=>{const v=String(x||"").trim().toLowerCase().replace(/[.)\]]$/,"");return /^(t|true|yes|correct)$/.test(v)?"0":/^(f|false|no|incorrect)$/.test(v)?"1":null};
+function rowToForm(c){ /* c = cells of one row */
+ let t=typeOf(c[0]),r=c.slice(1);
+ if(!t){r=c;const tf=tfOf(c[1]);t=c.length>=6?"mcq":(c.length<=3&&tf!=null)?"tf":null;if(!t)throw new Error("could not tell the question type. Start the line with MCQ, TF, AR or MATCH, or use the template")}
+ if(t==="mcq"){const opts=r.slice(1,5);const ai=letterOf(r[5],opts);if(ai<0)throw new Error(`the answer "${r[5]||""}" should be A, B, C or D`);return {type:"mcq",q:r[0],o0:opts[0],o1:opts[1],o2:opts[2],o3:opts[3],answer:String(ai),explanation:r[6],skill:SK.find(k=>k.toLowerCase()===String(r[7]||"").toLowerCase()),say:r[8]}}
+ if(t==="tf"){const v=tfOf(r[1])??tfOf(r[5]);if(v==null)throw new Error("the answer should be True or False");return {type:"tf",q:r[0],answer:v,explanation:r[1]&&tfOf(r[1])!=null?r[2]:r[6],say:r[8]}}
+ if(t==="ar"){const ai=letterOf(r[2],[]);const ai2=ai>=0?ai:letterOf(r[5],[]);if(ai2<0)throw new Error("the answer should be A, B, C or D");return {type:"ar",assertion:r[0],reason:r[1],answer:String(ai2),explanation:ai>=0?r[3]:r[6]}}
+ return {type:"match",q:r[0],pairs:(r[1]||"").split(/;|\n/).map(x=>x.replace(/\s*(->|→|-|:)\s*/,"=")).join("\n"),explanation:r[2]||r[6]}}
+function parseBlocks(txt){ /* numbered questions with options on their own lines */
+ const out=[],errs=[];let cur=null;const push=()=>{if(cur){out.push(cur)};cur=null};
+ const lines=txt.split("\n").map(l=>l.trim());
+ for(const l of lines){if(!l){continue}
+  let m;
+  if((m=l.match(/^\(?([A-Da-d])[).:\]]\s*(.+)$/))&&cur&&!cur.ansSeen){cur.opts["ABCD".indexOf(m[1].toUpperCase())]=m[2].trim();continue}
+  if((m=l.match(/^(?:correct\s+)?(?:answer|ans|key)\s*[:.\-]\s*(.+)$/i))&&cur){cur.ans=m[1].trim();cur.ansSeen=true;continue}
+  if((m=l.match(/^(?:explanation|reason|why)\s*[:.\-]\s*(.+)$/i))&&cur){cur.ex=m[1].trim();continue}
+  if((m=l.match(/^(?:q(?:uestion)?\s*)?\d+\s*[).:\-]\s*(.+)$/i))){push();cur={q:m[1].trim(),opts:[]};continue}
+  if(cur&&!cur.opts.length&&!cur.ansSeen){cur.q+=" "+l;continue}
+  if(!cur){cur={q:l,opts:[]};continue}
+  if(cur.ansSeen&&!cur.ex){cur.ex=l}}
+ push();
+ return out.map((b,i)=>{try{const o=b.opts.filter(Boolean);let f;
+  if(o.length===2&&o.every(x=>/^(true|false)$/i.test(x))||(!o.length&&tfOf(b.ans)!=null)){const v=o.length?letterOf(b.ans,o):+tfOf(b.ans);f={type:"tf",q:b.q.replace(/\s*\(?true\s*(\/|or)\s*false\)?\s*[:?]?$/i,""),answer:String(o.length&&/^false$/i.test(o[v])?1:o.length?0:v),explanation:b.ex}}
+  else{if(o.length<2)throw new Error("needs options A), B), C), D) on separate lines");const ai=letterOf(b.ans,o);if(ai<0)throw new Error(`add a line like "Answer: B" (found "${b.ans||"no answer"}")`);
+   f={type:"mcq",q:b.q,o0:o[0],o1:o[1],o2:o[2],o3:o[3],answer:String(ai),explanation:b.ex}}
+  return {ok:buildQ(f)}}catch(e){return {err:`Question ${i+1}: ${e.message}`}}})}
+function parseImport(txt,kind){txt=String(txt||"").replace(/\r\n?/g,"\n").replace(/ /g," ");const out=[],errs=[];
+ if(kind==="questionnaire"){
+  const sep=txt.includes("\t")?"\t":txt.includes("|")?"|":/,(\s*)(r|rev|reverse|yes|no|)\s*$/im.test(txt)?",":null;
+  const rows=sep?csvRows(txt,sep):txt.split("\n").map(l=>[l.trim()]).filter(r=>r[0]);
+  rows.forEach((c,i)=>{const st=c[0].replace(/^\d+\s*[).:\-]\s*/,"");if(i===0&&/^(statement|question|item)s?$/i.test(st))return;if(!st)return;try{out.push(buildQ({type:"likert",q:st,reverse:/^(r|rev|reverse|yes|y|true)$/i.test(c[1]||"")}))}catch(e){errs.push(`Line ${i+1}: ${e.message}`)}});
+  return {out,errs}}
+ const lines=txt.split("\n").filter(l=>l.trim());
+ const pipe=lines.filter(l=>l.includes("|")).length>=lines.length/2,tab=!pipe&&lines.filter(l=>l.includes("\t")).length>=lines.length/2;
+ const comma=!pipe&&!tab&&lines.filter(l=>(l.match(/,/g)||[]).length>=4).length>=lines.length/2;
+ if(pipe||tab||comma){const rows=csvRows(txt,pipe?"|":tab?"\t":",");
+  rows.forEach((c,i)=>{if(i===0&&/^(type|question type|q\.?\s*type|question)$/i.test(c[0]))return;
+   try{out.push(buildQ(rowToForm(c)))}catch(e){errs.push(`Line ${i+1}: ${e.message}`)}});return {out,errs}}
+ parseBlocks(txt).forEach(r=>r.ok?out.push(r.ok):errs.push(r.err));return {out,errs}}
+function templateCSV(kind){
+ const L=kind==="questionnaire"?[["statement","reverse"],["I feel nervous when I speak English in class.",""],["I feel confident when I answer in English.","R"]]
+ :[["type","question","option_a","option_b","option_c","option_d","answer","explanation","skill","audio_script"],
+  ["MCQ","What is a tide?","Rise and fall of the sea","A fish","A boat","A net","A","Tides are the regular rise and fall of sea level.","Vocabulary",""],
+  ["TF","A catamaran is a kind of boat.","","","","","True","Catamarans are boats with two hulls.","",""],
+  ["AR","Fishermen read the sky. (assertion)","The sky shows the weather. (reason)","","","","A","The reason explains the assertion.","",""],
+  ["MATCH","Match the word with its meaning.","bow=front of a boat; stern=back of a boat; net=used to catch fish","","","","","Bow is the front, stern is the back.","",""],
+  ["MCQ","When do the boats return?","At five","Before noon","In the evening","At midnight","B","The speaker says before noon.","Listening","The boats leave at five in the morning and return before noon."]];
+ return "﻿"+L.map(csvLine).join("\r\n")}
 const qLabel=q=>q.q||q.assertion||"Match the following";
 const typeName={mcq:"Multiple choice",tf:"True / False",ar:"Assertion & reason",match:"Match the following",likert:"Statement (1–5)"};
 
@@ -1139,7 +1192,7 @@ async function libraryTab(){
  const [acts,atts]=await Promise.all([ok(db.from("activities").select("*").order("sort").order("created_at")),fetchAll("activity_attempts","activity_id,student_id,status")]);
  const cnt={};atts.filter(a=>a.status==="done").forEach(a=>(cnt[a.activity_id]=cnt[a.activity_id]||new Set()).add(a.student_id));
  const f=r.f||"all",shown=acts.filter(a=>f==="all"||a.status===f);
- const row=a=>{const n=a.kind==="flashcards"?a.cards.length:a.questions.length,tg=TARGET[a.purpose];
+ const row=a=>{const n=a.kind==="flashcards"?a.cards.length:a.questions.length,tg=null;
   return `<div class="card lib-row"><div class="lib-main"><div class="row"><b>${esc(a.title)}</b><span class="chip ${a.status==="published"?"c-Completed":"c-Inprogress"}">${a.status==="published"?"Published":"Draft"}</span></div>
   <div class="muted small">${KIND[a.kind]}${a.skill?" · "+a.skill:""}${a.segment?" · "+a.segment:""} · ${n} ${a.kind==="flashcards"?"cards":a.kind==="questionnaire"?"statements":"questions"}${tg&&a.kind!=="flashcards"?` (target ${tg})`:""} · ${(cnt[a.id]?.size)||0} students completed</div></div>
   <div class="lib-acts"><button class="soft" data-act="libedit" data-id="${a.id}">Edit</button><button class="soft" data-act="libprev" data-id="${a.id}">Preview</button><button class="soft" data-act="libpub" data-id="${a.id}" data-s="${a.status==="published"?"draft":"published"}">${a.status==="published"?"Unpublish":"Publish"}</button>
@@ -1151,7 +1204,7 @@ async function libraryTab(){
  ${groups.map(([p,list])=>`<h3 class="libh">${PURPOSE[p]}</h3><div class="stack">${list.map(row).join("")}</div>`).join("")||'<div class="empty">Nothing here yet. Choose a type above to create your first activity.</div>'}`}
 
 function editorPage(){
- const d=ED.data,isQ=d.kind==="questionnaire",isF=d.kind==="flashcards",n=d.questions.length,tg=TARGET[d.purpose],f=ED.qf,lock=ED.locked;
+ const d=ED.data,isQ=d.kind==="questionnaire",isF=d.kind==="flashcards",n=d.questions.length,tg=null,f=ED.qf,lock=ED.locked;
  const sel=(name,opts,val)=>`<select data-ed="${name}" data-chg="edre">${opts.map(o=>`<option value="${o[0]}" ${String(val)===String(o[0])?"selected":""}>${o[1]}</option>`).join("")}</select>`;
  const skillSel=(nm,val)=>`<select name="${nm}"><option value="">Same as activity</option>${SK.map(k=>`<option ${val===k?"selected":""}>${k}</option>`).join("")}</select>`;
  const ansSel=(labels,val)=>`<select name="answer"><option value="">Choose…</option>${labels.map((l,i)=>`<option value="${i}" ${String(val)===String(i)?"selected":""}>${l}</option>`).join("")}</select>`;
@@ -1166,12 +1219,13 @@ function editorPage(){
   ${isQ?'<input type="hidden" name="type" value="likert">':`<label>Question type<select name="type" data-chg="qtype">${["mcq","tf","ar","match"].map(t=>`<option value="${t}" ${f.type===t?"selected":""}>${typeName[t]}</option>`).join("")}</select></label>`}
   ${qfields}${isQ?"":`<label>Explanation (shown to students after a wrong answer in interventions and practice)<textarea name="explanation" rows="2">${esc(f.explanation||"")}</textarea></label><label>Audio script (optional): the website reads this aloud when the student presses Play audio. Use it for listening questions.<textarea name="say" rows="2">${esc(f.say||"")}</textarea></label>${d.purpose==="posttest"?`<label>Skill this question tests${skillSel("skill",f.skill)}</label>`:""}`}
   <div class="actions"><button class="primary">${ED.qi!=null?"Update question":"Add to list"}</button>${ED.qi!=null?'<button type="button" class="outline" data-act="edqcancel">Cancel</button>':""}</div>`}</form>
-  ${lock?"":`<details class="card"><summary>Import many ${isQ?"statements":"questions"} at once</summary><form data-form="edimport" class="stack" style="margin-top:12px"><p class="muted small">${isQ?"One statement per line. Add <code>| R</code> at the end of positively worded statements that must be reverse-scored.":"One question per line, parts separated by <code>|</code>:<br><code>MCQ | question | A | B | C | D | answer letter | explanation</code><br><code>TF | statement | T or F | explanation</code><br><code>AR | assertion | reason | answer letter | explanation</code><br><code>MATCH | instruction | left=right; left=right | explanation</code>"}</p>
-  <textarea name="txt" id="edImportTxt" rows="8"></textarea><label>Or choose a text or CSV file in this format<input type="file" accept=".txt,.csv,text/plain" data-chg="edfile"></label><button class="soft">Import</button></form></details>`}`;
+  ${lock?"":`<details class="card" ${ED.importOpen?"open":""} data-imp="1"><summary>Import many ${isQ?"statements":"questions"} at once</summary><form data-form="edimport" class="stack" style="margin-top:12px"><p class="muted small">${isQ?"Paste one statement per line, or a spreadsheet with the columns <b>statement</b> and <b>reverse</b> (R for positively worded statements).":`You can paste any of these:<br>• rows copied from Excel or Google Sheets, or a CSV file, using the template columns;<br>• numbered questions with options on separate lines, for example<br><code>1. What is a tide?</code><br><code>A) Rise and fall of the sea</code> <code>B) A fish</code> <code>C) A boat</code> <code>D) A net</code><br><code>Answer: A</code> <code>Explanation: …</code>;<br>• one question per line with <code>|</code> between parts: <code>MCQ | question | A | B | C | D | answer | explanation</code>, <code>TF | statement | True | explanation</code>, <code>AR | assertion | reason | answer | explanation</code>, <code>MATCH | instruction | left=right; left=right | explanation</code>.`}</p>
+  <div class="actions" style="margin:0"><button type="button" class="soft" data-act="edtemplate">Download the template (opens in Excel or Google Sheets)</button></div>
+  <textarea name="txt" id="edImportTxt" rows="8">${esc(ED.importText||"")}</textarea>${ED.importErrs?.length?`<div class="notice"><b>${ED.importErrs.length} line(s) could not be read:</b><ul class="small">${ED.importErrs.slice(0,12).map(e=>`<li>${esc(e)}</li>`).join("")}</ul></div>`:""}<label>Or choose a CSV or text file<input type="file" accept=".txt,.csv,.tsv,text/plain,text/csv" data-chg="edfile"></label><button class="soft">Import</button></form></details>`}`;
  const side=isF?"":`<div class="card qlist"><div class="row"><h3>${isQ?"Statements":"Questions"} (${n}${tg?` / ${tg}`:""})</h3></div>${tg?`<div class="bar"><i style="width:${Math.min(100,Math.round(100*n/tg))}%"></i></div>`:""}
   ${d.questions.map((q,i)=>`<div class="qitem ${ED.qi===i?"cur":""}"><div><span class="muted small">Q${i+1} · ${typeName[q.type]}${q.reverse?" · reversed":""}${q.skill?" · "+q.skill:""}</span><div>${esc(qLabel(q))}</div></div>${lock?"":`<div class="qbtns"><button type="button" title="Move up" data-act="edqmove" data-i="${i}" data-d="-1" ${i===0?"disabled":""}>↑</button><button type="button" title="Move down" data-act="edqmove" data-i="${i}" data-d="1" ${i===n-1?"disabled":""}>↓</button><button type="button" title="Edit" data-act="edqedit" data-i="${i}">✎</button><button type="button" title="Remove" class="danger" data-act="edqdel" data-i="${i}">✕</button></div>`}</div>`).join("")||`<p class="muted small">No ${isQ?"statements":"questions"} yet.</p>`}</div>`;
  const tool=(cmd,label,title,val)=>`<button type="button" data-act="edfmt" data-cmd="${cmd}" ${val?`data-val="${val}"`:""} title="${title}">${label}</button>`;
- return `<div class="edtop"><div><div class="eyebrow">${ED.id?"EDIT":"NEW"} ${KIND[d.kind].toUpperCase()}</div><h1>${esc(d.title||"Untitled "+KIND[d.kind].toLowerCase())}</h1></div>
+ return `<div class="edtop"><div><div class="eyebrow">${ED.id?"EDIT":"NEW"} ${KIND[d.kind].toUpperCase()} · ${isF?d.cards.length+" cards":n+(isQ?" statements":" questions")}</div><h1>${esc(d.title||"Untitled "+KIND[d.kind].toLowerCase())}</h1></div>
   <div class="actions"><span class="chip ${d.status==="published"?"c-Completed":"c-Inprogress"}">${d.status==="published"?"Published":"Draft"}</span><button class="outline" data-act="edpreview">▶ Preview</button><button class="soft" data-act="edsave" data-s="draft">Save draft</button><button class="primary" data-act="edsave" data-s="published">Publish</button></div></div>
  <div class="edwrap ${isF?"one":""}"><div class="stack">
   <div class="card stack"><h3>Settings</h3><div class="form-grid"><label>Title<input data-ed="title" value="${esc(d.title)}" placeholder="e.g. Listening pre-test"></label>
@@ -1214,6 +1268,7 @@ Object.assign(ACT,{
  async libpub(el){await rpc("set_activity_status",{p_id:el.dataset.id,p_status:el.dataset.s});toast(el.dataset.s==="published"?"Published. Students can now see it in its step.":"Moved back to drafts.");render()},
  async libdup(el){await loadED(el.dataset.id);const d={...ED.data,title:ED.data.title+" (copy)",status:"draft"};await rpc("save_activity",{p_id:null,p_data:d,p_keys:ED.keys});ED=null;toast("Copy saved as a draft.");render()},
  async libdel(el){if(!confirm("Delete this activity and every student result recorded for it? This cannot be undone."))return;await ok(db.from("activities").delete().eq("id",el.dataset.id));toast("Deleted.");render()},
+ edtemplate(){download(ED.data.kind==='questionnaire'?'questionnaire_template.csv':'quiz_template.csv',templateCSV(ED.data.kind))},
  edfmt(el,e){e.preventDefault();$("edPassage")?.focus();document.execCommand(el.dataset.cmd,false,el.dataset.val||null)},
  edqedit(el){edSync();ED.qi=+el.dataset.i;ED.qf=qToForm(ED.data.questions[ED.qi],ED.keys[ED.qi]||{});render();document.querySelector("form[data-form=edq]")?.scrollIntoView({behavior:"smooth",block:"center"})},
  edqcancel(){edSync();ED.qi=null;ED.qf=blankQ(ED.data.kind);render()},
@@ -1224,14 +1279,15 @@ Object.assign(ACT,{
  async edsave(el){edSync();const d={...ED.data,status:el.dataset.s};
   if(!d.title.trim())return toast("Give it a title first.");
   if(el.dataset.s==="published"){if(d.kind==="flashcards"?!d.cards.length:!d.questions.length)return toast("Add content before publishing.");
-   const tg=TARGET[d.purpose];if(tg&&d.questions.length!==tg&&!confirm(`This ${PURPOSE[d.purpose].toLowerCase()} has ${d.questions.length} questions; the plan is ${tg}. Publish anyway?`))return}
+}
   const id=await rpc("save_activity",{p_id:ED.id,p_data:d,p_keys:ED.keys});ED.id=id;ED.data.status=d.status;ED.dirty=false;S.r.id=id;navKey=JSON.stringify(navSnap());history.replaceState({llc:navSnap(),d:navDepth},"");toast(d.status==="published"?"Published.":"Draft saved.");render()}});
 Object.assign(FORM,{
  edq(f,fd){edSync();let b;try{b=buildQ(ED.qf)}catch(e){return toast(e.message)}
   if(ED.qi!=null){ED.data.questions[ED.qi]=b.q;ED.keys[ED.qi]=b.k}else{ED.data.questions.push(b.q);ED.keys.push(b.k)}
-  ED.qi=null;ED.qf={type:ED.qf.type};ED.dirty=true;render();toast("Question saved in the list. Remember to save the activity.")},
- edimport(f,fd){edSync();const {out,errs}=parseImport(fd.get("txt"),ED.data.kind);out.forEach(b=>{ED.data.questions.push(b.q);ED.keys.push(b.k)});ED.dirty=true;render();
-  toast(errs.length?`${out.length} imported, ${errs.length} skipped. ${errs[0]}`:`${out.length} imported. Remember to save.`)}});
+  ED.qi=null;ED.qf={type:ED.qf.type};ED.dirty=true;render();toast("Added to the list. Press Save draft or Publish at the top to save it.")},
+ edimport(f,fd){edSync();const txt=fd.get("txt");const {out,errs}=parseImport(txt,ED.data.kind);out.forEach(b=>{ED.data.questions.push(b.q);ED.keys.push(b.k)});if(out.length)ED.dirty=true;
+  ED.importErrs=errs;ED.importText=errs.length?txt:"";ED.importOpen=!!errs.length;render();
+  toast(out.length?`${out.length} question${out.length>1?"s":""} added${errs.length?`, ${errs.length} could not be read (listed under the import box)`:""}. Press Publish at the top when ready.`:`Nothing was imported. ${errs[0]||"The box is empty."}`)}});
 CHG.edre=()=>{edSync();ED.dirty=true;render()};
 CHG.qtype=el=>{edSync();ED.qf={type:el.value,explanation:ED.qf.explanation,skill:ED.qf.skill};render()};
 CHG.edfile=async el=>{const file=el.files[0];if(!file)return;if(file.size>2e6)return toast("That file is too large.");$("edImportTxt").value=await file.text();toast("File loaded. Press Import.")};
@@ -1255,12 +1311,12 @@ CHG.stage=async el=>{await ok(db.from("research_stages").update({is_open:el.chec
 async function attendTab(){
  if(role()==="student"){const [ss,at]=await Promise.all([ok(db.from("class_sessions").select("*").order("started_at",{ascending:false})),ok(db.from("attendance").select("*").eq("student_id",user.id))]);
   const m={};at.forEach(a=>m[a.session_id]=a);const pres=ss.filter(s=>m[s.id]&&m[s.id].status!=="absent").length;
-  return `<div class="head"><div class="eyebrow">ATTENDANCE</div><h1>My attendance</h1><p>Your attendance is recorded when you press Join class during a live class, or when your teacher marks it.</p></div>
+  return `<div class="head"><div class="eyebrow">ATTENDANCE</div><h1>My attendance</h1><p>Your attendance is recorded when you press Join class during a live class, or when your professor marks it.</p></div>
   <div class="statrow"><div class="card stat"><b>${ss.length?Math.round(100*pres/ss.length):0}%</b><span>Attendance</span></div><div class="card stat"><b>${pres}</b><span>Classes attended</span></div><div class="card stat"><b>${ss.length}</b><span>Classes held</span></div></div>
   <div class="card" style="overflow:auto"><table><thead><tr><th>Class</th><th>Date</th><th>Status</th></tr></thead><tbody>${ss.map(s=>{const a=m[s.id]?.status||"absent";return `<tr><td>${esc(s.title)}</td><td>${fmtDT(s.started_at)}</td><td><span class="chip ${a==="absent"?"c-Locked":a==="late"?"c-Inprogress":"c-Completed"}">${a[0].toUpperCase()+a.slice(1)}</span></td></tr>`}).join("")||'<tr><td colspan="3" class="muted">No classes yet.</td></tr>'}</tbody></table></div>`}
  const r=R();const [ss,at,st]=await Promise.all([ok(db.from("class_sessions").select("*").order("started_at",{ascending:false})),fetchAll("attendance"),roster()]);
  if(r.sess){const s=ss.find(x=>x.id===r.sess);if(!s)return '<div class="card">Class not found.</div>';const m={};at.filter(a=>a.session_id===s.id).forEach(a=>m[a.student_id]=a);
-  return `<div class="head"><div class="eyebrow">ATTENDANCE</div><h1>${esc(s.title)}</h1><p>${fmtDT(s.started_at)} · ${s.mode==="live"?"Live class (students are marked when they join)":"Marked by teacher"}</p></div>
+  return `<div class="head"><div class="eyebrow">ATTENDANCE</div><h1>${esc(s.title)}</h1><p>${fmtDT(s.started_at)} · ${s.mode==="live"?"Live class (students are marked when they join)":"Marked by professor"}</p></div>
   <div class="actions" style="margin:0 0 12px"><button class="soft" data-act="attall" data-id="${s.id}">Mark everyone present</button><button class="outline danger" data-act="attdel" data-id="${s.id}">Delete this class</button></div>
   <div class="card" style="overflow:auto"><table><thead><tr><th>Student</th><th>Student no.</th><th>Status</th><th>Joined</th></tr></thead><tbody>${st.map(x=>{const a=m[x.id];return `<tr><td>${esc(x.full_name)}</td><td>${esc(x.sp.student_no||"")}</td><td><select data-chg="attset" data-s="${s.id}" data-u="${x.id}">${["absent","present","late"].map(o=>`<option ${((a?.status)||"absent")===o?"selected":""}>${o}</option>`).join("")}</select></td><td class="muted small">${a?.joined_at&&a.status!=="absent"?fmtDT(a.joined_at):"-"}</td></tr>`}).join("")}</tbody></table></div>`}
  const pc=sid=>ss.length?Math.round(100*at.filter(a=>a.student_id===sid&&a.status!=="absent").length/ss.length):null;
@@ -1282,22 +1338,23 @@ ACT.golive=async el=>{const on=el.dataset.on==="1";await rpc("set_live",{p_on:on
 ACT.joinlive=async()=>{const w=window.open("about:blank","_blank");try{const u=await rpc("join_live");if(w){w.opener=null;w.location.href=u}else location.href=u;toast("Attendance recorded. Enjoy the class.")}catch(e){w&&w.close()}};
 document.addEventListener("input",e=>{if(ED&&e.target.closest("[data-ed],#edPassage,#edCards"))ED.dirty=true});
 addEventListener("beforeunload",e=>{if(ED&&ED.dirty&&S.r?.view==="edit"){e.preventDefault();e.returnValue=""}});
+document.addEventListener("toggle",e=>{if(ED&&e.target.matches&&e.target.matches("details[data-imp]"))ED.importOpen=e.target.open},true);
 
 /* =====================================================================
    v6 MODULE: discussion forum, live quiz game
    ===================================================================== */
-const FK={public:["Class discussion","Everyone in the class can read and reply."],staff:["Ask a teacher","Private between one student and the researcher or professors."],dm:["Friends","Private chat between two classmates. Teachers can read it for safety."]};
+const FK={public:["Class discussion","Everyone in the class can read and reply."],staff:["Ask a professor","Private between one student and the researcher or professors."],dm:["Friends","Private chat between two classmates. Professors can read it for safety."]};
 async function forumTab(){
  const r=R(),staff=isStaff();
  if(r.thread)return threadPage(r.thread);
  const k=r.k||"public";const [ths,mates]=await Promise.all([ok(db.from("forum_threads").select("*").order("last_at",{ascending:false})),staff?roster():rpc("classmates")]);
  const list=ths.filter(t=>t.kind===k);
- const other=t=>t.kind==="public"?`Started by ${esc(t.creator_name||"")}`:staff?`${esc(t.creator_name||"")}${t.peer_name?" ↔ "+esc(t.peer_name):""}`:t.kind==="dm"?`With ${esc(t.created_by===user.id?t.peer_name:t.creator_name)}`:"With your teachers";
+ const other=t=>t.kind==="public"?`Started by ${esc(t.creator_name||"")}`:staff?`${esc(t.creator_name||"")}${t.peer_name?" ↔ "+esc(t.peer_name):""}`:t.kind==="dm"?`With ${esc(t.created_by===user.id?t.peer_name:t.creator_name)}`:"With your professors";
  const canNew=!(staff&&k==="dm");
  return `<div class="head"><div class="eyebrow">DISCUSSION</div><h1>Discussion forum</h1><p>Ask questions, talk with the class, or message privately.</p></div>
  <div class="seg">${Object.entries(FK).map(([x,v])=>`<button data-act="fk" data-k="${x}" class="${k===x?"on":""}">${staff&&x==="staff"?"Private with students":staff&&x==="dm"?"Student chats":v[0]} (${ths.filter(t=>t.kind===x).length})</button>`).join("")}</div>
  <p class="muted small" style="margin:10px 2px">${staff&&k==="dm"?"Private chats between students. You can read them and remove messages if needed.":FK[k][1]}</p>
- ${canNew?`<details class="card" ${list.length?"":"open"}><summary>${k==="public"?"Start a new topic":k==="staff"?(staff?"Message a student privately":"Ask a teacher privately"):"Message a classmate"}</summary><form data-form="fnew" data-k="${k}" class="stack" style="margin-top:12px">
+ ${canNew?`<details class="card" ${list.length?"":"open"}><summary>${k==="public"?"Start a new topic":k==="staff"?(staff?"Message a student privately":"Ask a professor privately"):"Message a classmate"}</summary><form data-form="fnew" data-k="${k}" class="stack" style="margin-top:12px">
   ${k==="dm"||(k==="staff"&&staff)?`<label>${staff?"Student":"Classmate"}<select name="peer" required><option value="">Choose…</option>${mates.map(m=>`<option value="${m.id}">${esc(m.full_name)}</option>`).join("")}</select></label>`:""}
   ${k==="dm"?"":`<label>Title<input name="title" required maxlength="200"></label>`}<label>Message<textarea name="body" rows="3" required maxlength="4000"></textarea></label><button class="primary">Send</button></form></details>`:""}
  <div class="stack" style="margin-top:14px">${list.map(t=>`<button class="card thread-row" data-act="fopen" data-id="${t.id}"><div><b>${esc(t.kind==="dm"&&!staff?(t.created_by===user.id?t.peer_name:t.creator_name):t.title)}</b><div class="muted small">${other(t)}</div></div><span class="muted small">${fmtDT(t.last_at)}</span></button>`).join("")||'<div class="empty">No conversations here yet.</div>'}</div>`}
@@ -1306,9 +1363,9 @@ async function threadPage(id){
  if(!t)return '<div class="card">This conversation is no longer available.</div>';const staff=isStaff();
  stopTimers();let last=ms.length;every(8000,async()=>{if(S.r?.thread!==id||document.activeElement?.name==="body"&&document.activeElement.value)return;const c=await db.from("forum_messages").select("id").eq("thread_id",id);if(c.data&&c.data.length!==last)render()});
  S.after=()=>{const b=$("msgs");if(b)b.scrollTop=b.scrollHeight};
- return `<div class="head"><div class="eyebrow">${FK[t.kind][0].toUpperCase()}</div><h1>${esc(t.kind==="dm"&&!staff?"Chat with "+(t.created_by===user.id?t.peer_name:t.creator_name):t.title)}</h1><p>${t.kind==="public"?"Everyone in the class can read this.":t.kind==="staff"?"Private: only this student and the teachers can read this.":"Private chat. Teachers can read it for safety."}</p></div>
+ return `<div class="head"><div class="eyebrow">${FK[t.kind][0].toUpperCase()}</div><h1>${esc(t.kind==="dm"&&!staff?"Chat with "+(t.created_by===user.id?t.peer_name:t.creator_name):t.title)}</h1><p>${t.kind==="public"?"Everyone in the class can read this.":t.kind==="staff"?"Private: only this student and the professors can read this.":"Private chat. Professors can read it for safety."}</p></div>
  ${staff?`<div class="actions" style="margin:0 0 12px"><button class="outline danger" data-act="fdelthread" data-id="${id}">Delete whole conversation</button></div>`:""}
- <div class="card chat"><div id="msgs" class="msgs">${ms.map(m=>`<div class="msg ${m.author_id===user.id?"mine":""} ${m.author_role!=="student"?"staff":""}"><div class="who">${esc(m.author_name||"")}${m.author_role!=="student"?' <span class="chip c-Available">Teacher</span>':""} <span class="muted">${fmtDT(m.created_at)}</span></div><div class="bubble">${m.removed?'<i class="muted">Message removed</i>':esc(m.body).replace(/\n/g,"<br>")}</div>${!m.removed&&(staff||m.author_id===user.id)?`<button class="linklike" data-act="fremove" data-id="${m.id}">Remove</button>`:""}</div>`).join("")}</div>
+ <div class="card chat"><div id="msgs" class="msgs">${ms.map(m=>`<div class="msg ${m.author_id===user.id?"mine":""} ${m.author_role!=="student"?"staff":""}"><div class="who">${esc(m.author_name||"")}${m.author_role!=="student"?' <span class="chip c-Available">Professor</span>':""} <span class="muted">${fmtDT(m.created_at)}</span></div><div class="bubble">${m.removed?'<i class="muted">Message removed</i>':esc(m.body).replace(/\n/g,"<br>")}</div>${!m.removed&&(staff||m.author_id===user.id)?`<button class="linklike" data-act="fremove" data-id="${m.id}">Remove</button>`:""}</div>`).join("")}</div>
  <form data-form="fpost" data-id="${id}" class="chatbox"><textarea name="body" rows="2" required maxlength="4000" placeholder="Write a message…"></textarea><button class="primary">Send</button></form></div>`}
 Object.assign(FORM,{
  async fnew(f,d){const k=f.dataset.k,peer=d.get("peer")||null,m=f.querySelector("[name=peer]");const title=k==="dm"?"Chat":d.get("title");
@@ -1320,24 +1377,26 @@ Object.assign(ACT,{fk(el){setR({k:el.dataset.k})},fopen(el){setR({thread:el.data
 
 /* ---------- live quiz game ---------- */
 let LG=null; /* {id, game, players, mine, picked} */
-const lgLeft=g=>Math.max(0,g.seconds-(Date.now()-new Date(g.q_started_at).getTime())/1000);
-async function lgPull(){if(!LG)return false;const [g,pl]=await Promise.all([db.from("live_games").select("*").eq("id",LG.id).maybeSingle(),db.from("live_players").select("*").eq("game_id",LG.id)]);if(!g.data)return false;
- const ch=!LG.game||g.data.phase!==LG.game.phase||g.data.q_index!==LG.game.q_index||(pl.data||[]).length!==(LG.players||[]).length;
- LG.game=g.data;LG.players=(pl.data||[]).sort((a,b)=>b.score-a.score);
- if(ch&&role()==="student"&&g.data.phase!=="question"){const a=await db.from("live_answers").select("*").eq("game_id",LG.id).eq("student_id",user.id);LG.mine=a.data||[]}
- if(ch&&g.data.phase==="question")LG.picked=null;
- return ch}
+const lgLeft=g=>Math.max(0,g.seconds-(Date.now()+(LG?.skew||0)-new Date(g.q_started_at).getTime())/1000);
+async function lgPull(){if(!LG)return false;let ch=false;
+ if(LG.host){const [g,pl]=await Promise.all([db.from("live_games").select("*").eq("id",LG.id).maybeSingle(),db.from("live_players").select("game_id,student_id,player_id,name,score,is_guest").eq("game_id",LG.id)]);if(!g.data)return false;
+  ch=!LG.game||g.data.phase!==LG.game.phase||g.data.q_index!==LG.game.q_index||(pl.data||[]).length!==(LG.players||[]).length;
+  LG.game=g.data;LG.players=(pl.data||[]).sort((a,b)=>b.score-a.score);LG.count=LG.players.length;return ch}
+ const r=await db.rpc("live_state",LG.guest?{p_game:LG.id,p_player:LG.player,p_token:LG.token}:{p_game:LG.id});if(r.error||!r.data)return false;const d=r.data;
+ ch=!LG.game||d.game.phase!==LG.game.phase||d.game.q_index!==LG.game.q_index||d.count!==LG.count;
+ if(ch&&d.game.phase==="question"&&(!LG.game||LG.game.q_index!==d.game.q_index))LG.picked=null;
+ LG.skew=new Date(d.server_now).getTime()-Date.now();LG.game=d.game;LG.players=d.players;LG.me=d.me;LG.mine=d.mine;LG.count=d.count;return ch}
 function lgLoop(){stopTimers();every(1500,async()=>{if(!LG)return stopTimers();try{if(await lgPull())render();else lgTick()}catch{}});every(250,lgTick)}
 function lgTick(){const g=LG?.game;if(!g||g.phase!=="question")return;const l=lgLeft(g),b=$("lgBar"),t=$("lgSec");if(b)b.style.width=(100*l/g.seconds)+"%";if(t)t.textContent=Math.ceil(l);
  if(l<=0&&isStaff()&&!LG.auto){LG.auto=true;rpc("live_step",{p_game:LG.id,p_action:"reveal"}).then(()=>{LG.auto=false;lgPull().then(render)}).catch(()=>LG.auto=false)}}
-const podium=(pl,n=5)=>`<ol class="board">${pl.slice(0,n).map((p,i)=>`<li class="${p.student_id===user.id?"me":""}"><span>${["🥇","🥈","🥉"][i]||i+1}</span><b>${esc(p.name||"Student")}</b><em>${p.score}</em></li>`).join("")||'<li class="muted">No players yet</li>'}</ol>`;
+const podium=(pl,n=5)=>`<ol class="board">${pl.slice(0,n).map((p,i)=>`<li class="${p.me||(user&&p.student_id===user.id)?"me":""}"><span>${["🥇","🥈","🥉"][i]||i+1}</span><b>${esc(p.name||"Player")}${p.is_guest?' <small class="guesttag">guest</small>':""}</b><em>${p.score}</em></li>`).join("")||'<li class="muted">No players yet</li>'}</ol>`;
 function lgQuestion(g,opts={}){const q=g.current;if(!q)return "";const labels=q.type==="tf"?["True","False"]:q.type==="ar"?AR_OPTS:q.options||[];const rv=g.phase==="reveal"?g.reveal:null;const tot=rv?Object.values(rv.counts||{}).reduce((a,b)=>a+b,0):0;
  const stem=q.type==="ar"?`<div class="ar"><b>Assertion (A)</b> ${esc(q.assertion)}</div><div class="ar"><b>Reason (R)</b> ${esc(q.reason)}</div>`:esc(q.q||"");
  if(q.type==="match")return `<div class="lg-q">${stem}</div><div class="card">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><b>${rv?esc(q.right[rv.answer[i]]):"?"}</b></div>`).join("")}<p class="muted small">Matching questions are discussed together in a live quiz.</p></div>`;
  return `<div class="lg-q">${stem}</div><div class="tiles big t${labels.length}">${labels.map((o,i)=>{const c=rv?(rv.counts?.[String(i)]||0):0;const cls=rv?(rv.answer===i?" right":" dim"):(LG.picked===i?" picked":LG.picked!=null?" dim":"");
   return `<button type="button" class="tile c${i%4}${cls}" ${opts.play&&!rv&&LG.picked==null?`data-act="lgpick" data-v="${i}"`:"disabled"}><span>${"ABCD"[i]}</span>${esc(o)}${rv?`<em class="cnt">${c}${tot?` · ${Math.round(100*c/tot)}%`:""}</em>`:""}</button>`}).join("")}</div>${rv?.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`}
 async function hostPage(){
- if(!LG||LG.id!==R().id){LG={id:R().id};await lgPull()}
+ if(!LG||LG.id!==R().id){LG={id:R().id,host:true};await lgPull()}
  const g=LG.game;if(!g){LG=null;return '<div class="card">This live quiz has ended.</div>'}
  S.after=lgLoop;const pl=LG.players;
  if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ · ${esc(g.title||"")}</div><p>Students open <b>Live class</b> on the website and type this code</p><div class="lg-code">${g.code.split("").join("<i></i>")}</div>
@@ -1349,21 +1408,35 @@ async function hostPage(){
   ${g.phase==="reveal"?`<h3>Leaderboard</h3>${podium(pl)}`:""}
   <div class="actions">${g.phase==="question"?'<button class="primary" data-act="lgstep" data-a="reveal">Show answer</button>':`<button class="primary big-btn" data-act="lgstep" data-a="next">${g.q_index+1<g.n?"Next question →":"Finish and show results"}</button>`}<button class="outline danger" data-act="lgstep" data-a="end">End quiz</button></div></div>`}
 function playPage(){
- const g=LG?.game;if(!g)return '<div class="card">This live quiz has ended. <button class="soft" data-act="lgleave">Back</button></div>';
- S.after=lgLoop;const pl=LG.players,meRow=pl.find(p=>p.student_id===user.id),rank=pl.findIndex(p=>p.student_id===user.id)+1;
- if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ</div><h1>You're in!</h1><p class="muted">${esc(g.title||"")}</p><div class="lg-wait"><span></span><span></span><span></span></div><p>Waiting for your teacher to start. ${pl.length} joined so far.</p></div>`;
+ if(!LG&&S.page==="play"){const sv=(()=>{try{return JSON.parse(sessionStorage.getItem("llc_guest")||"null")}catch{return null}})();if(sv)LG=sv}
+ const g=LG?.game;
+ if(!g){if(LG&&!LG.tried){LG.tried=true;S.after=()=>lgPull().then(()=>render());return '<div class="card">Joining…</div>'}return `<div class="card">This live quiz has ended. <button class="soft" data-act="lgleave">Back</button></div>`}
+ S.after=lgLoop;const pl=LG.players||[],meRow=LG.me,rank=meRow?.rank;
+ const who=LG.guest&&meRow?`<p class="muted small">Playing as <b>${esc(meRow.name)}</b> (guest)</p>`:"";
+ if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ</div><h1>You're in!</h1><p class="muted">${esc(g.title||"")}</p>${who}<div class="lg-wait"><span></span><span></span><span></span></div><p>Waiting for the quiz to start. ${LG.count||0} joined so far.</p></div>`;
  if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>${rank===1?"You won! 🏆":rank?`You finished #${rank}`:"Finished"}</h1><p class="muted">${meRow?.score||0} points</p>${podium(pl)}<div class="actions"><button class="primary" data-act="lgleave">Done</button></div></div>${rank&&rank<=3?`<div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`:""}`;
  const my=(LG.mine||[]).find(a=>a.q_index===g.q_index);
- const status=g.phase==="reveal"?`<div class="fb ${my?.correct?"good":"bad"} lg-result"><b>${my?(my.correct?`✓ Correct! +${my.points} points`:"✗ Not this time"):"⏱ No answer"}</b><span>Your score: ${meRow?.score||0}${rank?` · position #${rank}`:""}</span></div>`:LG.picked!=null?'<div class="fb lg-result"><b>Answer locked in</b><span>Wait for the result…</span></div>':"";
+ const status=g.phase==="reveal"?`<div class="fb ${my?.correct?"good":"bad"} lg-result"><b>${my?(my.correct?`✓ Correct! +${my.points} points`:"✗ Not this time"):"⏱ No answer"}</b><span>Your score: ${meRow?.score||0}${rank?` · position #${rank}`:""}</span></div>`:(LG.picked!=null||my)?'<div class="fb lg-result"><b>Answer locked in</b><span>Wait for the result…</span></div>':"";
+ if(my&&LG.picked==null)LG.picked=-1;
  return `<div class="lg-stage"><div class="row"><span class="badge">Question ${g.q_index+1} of ${g.n}</span>${g.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(lgLeft(g))}</b>s</span>`:""}<span class="muted small">${meRow?.score||0} pts</span></div>
  ${g.phase==="question"?`<div class="bar lgbar"><i id="lgBar" style="width:${100*lgLeft(g)/g.seconds}%"></i></div>`:""}${lgQuestion(g,{play:true})}${status}</div>`}
-const joinQuizCard=()=>`<form data-form="lgjoin" class="card stack lg-join"><div class="eyebrow">LIVE QUIZ</div><h3>Join a live quiz</h3><p class="muted small">Type the six-digit code your teacher shows on the screen.</p><div class="row"><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="000000" class="codein"><button class="primary">Join</button></div></form>`;
+const joinQuizCard=()=>`<form data-form="lgjoin" class="card stack lg-join"><div class="eyebrow">LIVE QUIZ</div><h3>Join a live quiz</h3><p class="muted small">Type the six-digit code your professor shows on the screen.</p><div class="row"><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="000000" class="codein"><button class="primary">Join</button></div></form>`;
 Object.assign(FORM,{async lgjoin(f,d){const id=await rpc("live_join",{p_code:d.get("code")});LG={id};await lgPull();setR({view:"play",id})}});
+/* Join live page: live quiz codes work for everyone; guests give a name */
+async function joinLiveQuiz(code){ /* true when the code belonged to a live quiz */
+ if(!/^\d{6}$/.test(code))return false;
+ const look=await db.rpc("live_lookup",{p_code:code});if(look.error||!look.data)return false;
+ if(user&&role()==="student"){const r=await db.rpc("live_join",{p_code:code});if(r.error){toast(r.error.message);return true}LG={id:r.data};await lgPull();S.page="app";S.tab="live";S.r={view:"play",id:r.data};render();return true}
+ const name=($("displayName")?.value||"").trim();
+ if(name.length<2){toast(`Found "${look.data.title||"Live quiz"}". Type your name, then press Join again.`);$("displayName")?.focus();return true}
+ const r=await db.rpc("live_join_guest",{p_code:code,p_name:name});if(r.error){toast(r.error.message);return true}
+ LG={id:r.data.game,guest:true,player:r.data.player,token:r.data.token};try{sessionStorage.setItem("llc_guest",JSON.stringify(LG))}catch{}
+ await lgPull();S={page:"play"};render();return true}
 Object.assign(ACT,{
- async libhost(el){const g=await rpc("live_host",{p_activity:el.dataset.id,p_seconds:20});LG={id:g.id};await lgPull();setR({view:"host",id:g.id})},
+ async libhost(el){const g=await rpc("live_host",{p_activity:el.dataset.id,p_seconds:20});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},
  async lgstep(el){if(el.dataset.a==="end"&&!confirm("End this live quiz now?"))return;await rpc("live_step",{p_game:LG.id,p_action:el.dataset.a});await lgPull();if(el.dataset.a==="end"&&LG.game?.q_index<0){stopTimers();LG=null;return setR({})}render()},
- lgclose(){stopTimers();LG=null;setR({})},lgleave(){stopTimers();LG=null;setR({})},
- async lgpick(el){if(LG.picked!=null)return;LG.picked=+el.dataset.v;render();try{await rpc("live_answer",{p_game:LG.id,p_answer:LG.picked});try{playFeedbackSound(true)}catch{}}catch(e){}}});
+ lgclose(){stopTimers();LG=null;setR({})},lgleave(){stopTimers();const g=LG?.guest;LG=null;try{sessionStorage.removeItem("llc_guest")}catch{};if(g||S.page==="play"){S={page:"join"};render()}else setR({})},
+ async lgpick(el){if(LG.picked!=null)return;LG.picked=+el.dataset.v;render();try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:LG.picked}):rpc("live_answer",{p_game:LG.id,p_answer:LG.picked}));try{playFeedbackSound(true)}catch{}}catch(e){}}});
 
 /* =====================================================================
    v6 MODULE: statistics, SPSS export, Google Sheet sync, tab wiring
@@ -1485,6 +1558,24 @@ Object.assign(TAB,{dash:researchHome,practice:practiceTab,library:libraryTab,con
  live:async()=>{if(role()==="student"){if(R().view==="play")return playPage();return (await liveCard())+joinQuizCard()+joinPage(true)}return _live0()},
  setup:async()=>(await _setup0())+(role()==="researcher"?sheetCard():"")});
 const _nav0=ACT.nav;ACT.nav=async(el,e)=>{if((RUN.busy()||(ED&&ED.dirty&&S.r?.view==="edit"))&&!confirm(RUN.busy()?"Leave this test? Your answers so far are kept on this device.":"Leave without saving your changes?")){e.preventDefault();return}stopTimers();S.r=null;RUN.st=null;LG=null;return _nav0(el,e)};
+/* Analysis tab: include the research journey (pre-tests, interventions, post-test, anxiety questionnaire) */
+const _realData0=realData;
+realData=async function(){
+ const base=await _realData0();
+ const [acts,atts,sps]=await Promise.all([ok(db.from("activities").select("id,purpose,kind,skill,sort,created_at,status")),fetchAll("activity_attempts","student_id,activity_id,context,attempt_no,status,pct,score,detail",q=>q.eq("status","done")),ok(db.from("student_profiles").select("user_id,research_id,verified,year"))]);
+ const A={};acts.forEach(a=>A[a.id]=a);const ivs=acts.filter(a=>a.purpose==="intervention").sort((a,b)=>(a.sort-b.sort)||(a.created_at<b.created_at?-1:1)).map(a=>a.id);
+ const anx=acts.find(a=>a.purpose==="anxiety"&&a.status==="published")||acts.find(a=>a.purpose==="anxiety");
+ const byRid={};base.rows.forEach(r=>byRid[r.rid]=r);
+ sps.filter(s=>s.research_id&&s.verified).forEach(s=>{
+  const mine=atts.filter(t=>t.student_id===s.user_id&&t.attempt_no===1);if(!mine.length)return;
+  const r=byRid[s.research_id]||(byRid[s.research_id]={rid:s.research_id,year:s.year,pre:{},post:{},wk:{},weekly:[],anxPre:null,anxPost:null});
+  mine.forEach(t=>{const a=A[t.activity_id];if(!a)return;
+   if(a.purpose==="pretest"&&a.kind!=="questionnaire"&&a.skill)r.pre[a.skill]=+t.pct;
+   if(a.purpose==="posttest"){const bs=t.detail?.by_skill||{};Object.entries(bs).forEach(([k,v])=>{if(v.n)r.post[k]=100*v.c/v.n});if(!Object.keys(bs).length&&a.skill)r.post[a.skill]=+t.pct}
+   if(a.purpose==="intervention"){const i=ivs.indexOf(a.id);if(i>=0){r.weekly=r.weekly||[];r.weekly[i]=+t.pct}}
+   if(anx&&a.id===anx.id){if(t.context==="pre")r.anxPre=+t.score;if(t.context==="post")r.anxPost=+t.score}});
+  const n=Math.max(6,ivs.length,r.weekly.length);r.weekly=Array.from({length:n},(_,i)=>r.weekly[i]??null)});
+ return {rows:Object.values(byRid),rub:base.rub}};
 
 /* =====================================================================
    v7 MODULE: notification bell, staff password reset
@@ -1535,11 +1626,27 @@ ACT.resetpw=async el=>{const def=el.dataset.pw||"";const pw=prompt(`New password
  await rpc("staff_reset_password",{p_student:el.dataset.id,p_password:pw.trim()});toast(`Password reset. Tell ${el.dataset.name} to log in with: ${pw.trim()}`)};
 TABS.teacher.push(["profile","Account"]);TABS.researcher.push(["profile","Account"]);
 
+/* ---------- header: tabs that do not fit go into a "More" menu ---------- */
+function fitNav(){const nav=$("nav");if(!nav)return;
+ const old=nav.querySelector(".navmore");if(old){[...old.querySelectorAll(".more-menu button")].forEach(b=>nav.insertBefore(b,old));old.remove()}
+ if(innerWidth<=800)return;
+ if(nav.scrollWidth<=nav.clientWidth+1)return;
+ const w=document.createElement("div");w.className="navmore";w.innerHTML='<button type="button" class="more-btn" aria-haspopup="true" aria-expanded="false">More ▾</button><div class="more-menu" role="menu"></div>';nav.appendChild(w);
+ const menu=w.querySelector(".more-menu");let guard=0;
+ while(nav.scrollWidth>nav.clientWidth+1&&guard++<40){const items=[...nav.children].filter(x=>x!==w);if(items.length<=1)break;menu.prepend(items[items.length-1])}
+ if(menu.querySelector(".active"))w.querySelector(".more-btn").classList.add("active");
+ w.querySelector(".more-btn").onclick=e=>{e.stopPropagation();const o=!w.classList.contains("open");w.classList.toggle("open",o);e.currentTarget.setAttribute("aria-expanded",String(o))}}
+document.addEventListener("click",e=>{if(!e.target.closest(".navmore"))document.querySelectorAll(".navmore.open").forEach(x=>x.classList.remove("open"))});
+const _buildNav0=buildNav;buildNav=function(){_buildNav0();fitNav()};
+let _fitT;addEventListener("resize",()=>{clearTimeout(_fitT);_fitT=setTimeout(fitNav,120)});
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitNav);
+
 (async function init(){
  if(!db){$("app").innerHTML='<div class="notice">Could not load the Supabase library. Check your internet connection.</div>';return}
  try{await loadUser()}catch(e){console.error(e)}
  db.auth.onAuthStateChange(async(ev)=>{if(ev==="SIGNED_OUT"){user=null;profile=null;sp=null;buildNav()}});
  if(user)S={page:"app",tab:homeTab()};
+ else{try{if(sessionStorage.getItem("llc_guest"))S={page:"play"}}catch{}}
  if(RECOVERY)S={page:"newpass"};
  else if(AUTH_ERR){history.replaceState(null,"",location.pathname);setTimeout(()=>toast(/expired|invalid/i.test(AUTH_ERR)?"That link has expired. Please ask for a new password reset link.":AUTH_ERR),300)}
  BOOTED=true;render();
