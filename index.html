@@ -4,7 +4,8 @@
   <span class="liquid-blob blob-2"></span>
   <span class="liquid-blob blob-3"></span>
 </div>
-<header><a class="brand" href="#" id="homeLink"><b>LL</b> Live Language Coach</a><nav id="nav"></nav><div class="account"><span id="who">Not signed in</span><button id="authBtn" class="outline">Sign in</button></div></header>
+<header><a class="brand" href="#" id="homeLink"><b>LL</b> Live Language Coach</a><nav id="nav"></nav><div class="account"><span id="who">Not signed in</span><button id="authBtn" class="outline">Sign in</button></div><button id="navToggle" class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="nav"><span></span><span></span><span></span></button></header>
+<div id="navScrim" class="nav-scrim" aria-hidden="true"></div>
 <main id="app"></main><div id="toast"></div><div id="quoteModal" class="quote-modal hidden" role="dialog" aria-modal="true" aria-labelledby="quoteTitle"></div><footer>© 2026 Maria Kaisar Aaron R · Live Language Coach. All rights reserved. · <a data-act="nav" data-k="copyright">Copyright</a> · <a data-act="nav" data-k="contact">Contact</a> · <a data-act="nav" data-k="portfolio">Portfolio</a></footer><script src="app.js"></script>
 <!-- Independent chatbot pop-up -->
 <div id="chatbotWidget" class="chatbot-widget">
@@ -67,6 +68,19 @@
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') setOpen(false);
   });
+})();
+</script>
+<script>
+/* v5.4 mobile menu: slim sticky header with a menu icon */
+(()=>{const h=document.querySelector('header'),b=document.getElementById('navToggle'),n=document.getElementById('nav'),s=document.getElementById('navScrim');if(!h||!b||!n||!s)return;
+const set=o=>{h.classList.toggle('nav-open',o);document.body.classList.toggle('nav-open',o);b.setAttribute('aria-expanded',String(o));b.setAttribute('aria-label',o?'Close menu':'Open menu')};
+b.addEventListener('click',()=>set(!h.classList.contains('nav-open')));
+n.addEventListener('click',e=>{if(e.target.closest('button'))set(false)});
+h.querySelector('.account').addEventListener('click',()=>set(false));
+s.addEventListener('click',()=>set(false));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')set(false)});
+addEventListener('resize',()=>{if(innerWidth>800)set(false)});
+let y=scrollY;addEventListener('scroll',()=>{if(Math.abs(scrollY-y)>40)set(false);y=scrollY},{passive:true});
 })();
 </script>
 </body></html>

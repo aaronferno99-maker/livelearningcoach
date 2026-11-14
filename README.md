@@ -33,3 +33,18 @@ Student: tests, materials, feedback, live join. Teacher: assigned students' perf
 3. Researcher portal → Video lectures → add a YouTube link + exactly 10 quiz lines (`Question | A | B | C | D | correct letter`).
 4. Live class tab → paste a Zoom or Google Meet link → Save → Go live.
 Only three portals remain: Student, Professor, Researcher.
+
+## v6 update: research journey, activity builder, attendance, forum, live quiz, statistics
+1. Supabase → SQL Editor → paste `schema_v6.sql` → Run (once; safe to repeat). Do this BEFORE publishing the new site files.
+2. Publish the site files (index.html, app.js, styles.css) as before.
+3. Researcher or Professor → **My library**: create the anxiety questionnaire, the six pre-tests (50 questions each), the interventions (25 questions each, with a segment and media link), the post-test and the final questionnaire. Publish each one.
+4. **Research control**: open each stage when the class is ready.
+5. Researcher → **Setup** → Google Sheet: download the sync script and follow the four steps.
+6. Researcher → **Statistics**: on-screen results plus SPSS data and syntax downloads.
+
+Import format (one question per line):
+    MCQ | question | A | B | C | D | answer letter | explanation
+    TF | statement | T or F | explanation
+    AR | assertion | reason | answer letter | explanation
+    MATCH | instruction | left=right; left=right | explanation
+Questionnaire statements: one per line; add `| R` for positively worded (reverse-scored) statements.

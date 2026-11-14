@@ -820,6 +820,635 @@ document.addEventListener("change",async e=>{const el=e.target.closest("[data-ch
 $("authBtn").onclick=async()=>{if(user){stopPlayer();unwatchLive();await db.auth.signOut();user=null;profile=null;sp=null;mine=null;S={page:"home"};render()}else go("portals")};
 $("homeLink").onclick=e=>{e.preventDefault();user?go("app",homeTab()):go("home")};
 
+/* =====================================================================
+   v6 MODULE: research journey, activity runner, confidence meter
+   ===================================================================== */
+const PURPOSE={anxiety:"Anxiety questionnaire",pre_questionnaire:"Questionnaire (before pre-test)",pretest:"Pre-test",intervention:"Intervention",posttest:"Post-test",post_questionnaire:"Final questionnaire",practice:"Practice"};
+const KIND={quiz:"Quiz",reading:"Reading passage",flashcards:"Flashcards",questionnaire:"Questionnaire"};
+const SEGMENTS=["Podcast","Video","Graphic novel","Multimodal"];
+const AR_OPTS=["Both the assertion and the reason are true, and the reason correctly explains the assertion.","Both the assertion and the reason are true, but the reason does not explain the assertion.","The assertion is true, but the reason is false.","The assertion is false, but the reason is true."];
+const LIKERT=["Strongly disagree","Disagree","Neutral","Agree","Strongly agree"];
+const TARGET={pretest:50,intervention:25};
+const CONF_WORDS=["","Very unsure","Very unsure","Unsure","Unsure","Okay","Okay","Fairly confident","Confident","Very confident","Very confident"];
+const rpc=async(n,a)=>ok(db.rpc(n,a||{}));
+const R=()=>S.r||(S.r={});
+const setR=o=>{S.r=o;render();window.scrollTo(0,0)};
+const lsGet=k=>{try{return JSON.parse(localStorage.getItem(k)||"null")}catch{return null}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+const lsDel=k=>{try{localStorage.removeItem(k)}catch{}};
+
+/* allow only simple formatting in passages typed by staff */
+function cleanHTML(html){
+ const ALLOW={P:1,BR:1,B:1,STRONG:1,I:1,EM:1,U:1,H2:1,H3:1,H4:1,UL:1,OL:1,LI:1,BLOCKQUOTE:1,DIV:1,SPAN:1,SUB:1,SUP:1};
+ const doc=new DOMParser().parseFromString(`<div>${html||""}</div>`,"text/html");
+ const walk=n=>{[...n.childNodes].forEach(c=>{if(c.nodeType===3)return;if(c.nodeType!==1){c.remove();return}
+  if(["SCRIPT","STYLE","IFRAME","OBJECT","EMBED","LINK","META"].includes(c.tagName)){c.remove();return}
+  walk(c);if(!ALLOW[c.tagName]){c.replaceWith(...c.childNodes);return}
+  [...c.attributes].forEach(a=>c.removeAttribute(a.name))})};
+ walk(doc.body.firstChild);return doc.body.firstChild.innerHTML}
+
+/* ---------- back button on every section (also the phone's own back button) ---------- */
+let navDepth=0,navKey=null;
+const navSnap=()=>({page:S.page,tab:S.tab,video:S.video||null,r:S.r?{view:S.r.view||null,id:S.r.id||null,thread:S.r.thread||null,sess:S.r.sess||null}:null});
+const _render0=render;
+render=async function(){
+ const snap=navSnap(),key=JSON.stringify(snap);
+ if(key!==navKey){
+  if(navKey===null||(snap.page==="app"&&JSON.parse(navKey).page!=="app")){navDepth=0;history.replaceState({llc:snap,d:0},"")}
+  else{navDepth++;history.pushState({llc:snap,d:navDepth},"")}
+  navKey=key}
+ await _render0();
+ const a=$("app");
+ if(a&&navDepth>0&&!a.querySelector(".backbtn")&&!["home"].includes(S.page)){const b=document.createElement("button");b.className="backbtn";b.type="button";b.dataset.act="back";b.innerHTML='<span aria-hidden="true">←</span> Back';a.prepend(b)}
+};
+addEventListener("popstate",e=>{const st=e.state?.llc;if(!st)return;
+ if((RUN.busy()||(ED&&ED.dirty&&S.r?.view==="edit"))&&!confirm(RUN.busy()?"Leave this page? Your answers so far are kept on this device.":"Leave without saving your changes?")){history.pushState({llc:navSnap(),d:navDepth},"");return}
+ navDepth=e.state.d||0;stopTimers();S.page=st.page;S.tab=st.tab;S.video=st.video;S.r=st.r?{...st.r}:null;navKey=JSON.stringify(navSnap());render()});
+let timers=[];const every=(ms,f)=>{const t=setInterval(f,ms);timers.push(t);return t};
+function stopTimers(){timers.forEach(clearInterval);timers=[]}
+
+/* ---------- confidence meter ---------- */
+function gauge(v){const p=(v-1)/9,ang=Math.PI*(1-p),x=100+80*Math.cos(ang),y=100-80*Math.sin(ang);
+ return `<svg viewBox="0 0 200 118" class="gauge" aria-hidden="true"><defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stop-color="#f29fb5"/><stop offset=".55" stop-color="#8f84ea"/><stop offset="1" stop-color="#13a99b"/></linearGradient></defs>
+ <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#e3e1f3" stroke-width="16" stroke-linecap="round"/>
+ <path d="M20 100 A80 80 0 0 1 ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="url(#gg)" stroke-width="16" stroke-linecap="round"/>
+ <text x="100" y="96" text-anchor="middle" class="gauge-num">${v}</text></svg>`}
+function confCard(title,sub,btn,form,extra=""){
+ return `<form data-form="${form}" class="card conf-card stack"><div class="eyebrow">CONFIDENCE METER</div><h2>${title}</h2><p class="muted">${sub}</p>
+ <div id="confGauge">${gauge(5)}</div><div id="confWord" class="conf-word">${CONF_WORDS[5]}</div>
+ <input type="range" name="conf" min="1" max="10" step="1" value="5" data-inp="conf" aria-label="Confidence from 1 to 10"><div class="row small muted"><span>1 · not confident</span><span>10 · very confident</span></div>${extra}
+ <button class="primary">${btn}</button></form>`}
+
+/* ---------- student: research home ---------- */
+async function loadState(){return S.rs=await rpc("research_state")}
+const attOf=(a,ctx="")=>a.attempts.filter(t=>t.context===ctx);
+const doneOf=(a,ctx="")=>attOf(a,ctx).some(t=>t.status==="done");
+function stepInfo(st){
+ const A=p=>st.activities.filter(a=>a.purpose===p),anx=A("anxiety")[0]||null,pr=st.progress||{},o=st.stages||{},d=st.done||{};
+ const consent=!!pr.consent_at;
+ return {anx,consent,read:!!pr.process_read_at,
+  steps:[
+   {k:"pre_questionnaire",n:"Questionnaire",d:"Tell us how you feel about using English. There are no right or wrong answers.",items:[...(anx?[{a:anx,ctx:"pre"}]:[]),...A("pre_questionnaire").map(a=>({a,ctx:""}))],
+    lock:!consent?"Give your consent first.":!o.pre_questionnaire?"Your teacher has not opened this yet.":null,done:consent&&d.pre_questionnaire},
+   {k:"pretest",n:"Pre-test",d:"One test for each skill. It shows your level before the classes begin.",items:A("pretest").map(a=>({a,ctx:""})),
+    lock:!consent?"Give your consent first.":!d.pre_questionnaire?"Finish the questionnaire first.":!o.pretest?"Your teacher has not opened this yet.":null,done:d.pretest&&A("pretest").length>0},
+   {k:"intervention",n:"Interventions",d:"Flipped-learning sessions with podcasts, videos, graphic novels and mixed media. Each has a quiz with explanations.",items:A("intervention").map(a=>({a,ctx:""})),
+    lock:!d.pretest||!A("pretest").length?"Finish every pre-test first.":!o.intervention?"Your teacher will open the sessions after the pre-test.":null,done:A("intervention").length>0&&A("intervention").every(a=>doneOf(a))},
+   {k:"posttest",n:"Post-test",d:"One final test that covers all the skills.",items:A("posttest").map(a=>({a,ctx:""})),
+    lock:!d.pretest||!A("pretest").length?"Finish every pre-test first.":!o.posttest?"Your teacher will open the post-test at the end of the course.":null,done:d.posttest},
+   {k:"post_questionnaire",n:"Final questionnaire",d:"Your views after the course. This opens once the post-test is submitted.",items:A("post_questionnaire").map(a=>({a,ctx:""})),
+    lock:!d.posttest?"Submit the post-test first.":!o.post_questionnaire?"Your teacher has not opened this yet.":null,done:d.post_questionnaire&&A("post_questionnaire").length>0}]}}
+function itemRow(it,locked,anx){
+ const a=it.a,done=doneOf(a,it.ctx),open=attOf(a,it.ctx).find(t=>t.status==="open"),last=attOf(a,it.ctx).filter(t=>t.status==="done").slice(-1)[0];
+ const isTest=a.kind!=="questionnaire",learn=a.purpose==="intervention";
+ let right="";
+ if(locked)right=`<span class="chip c-Locked">Locked</span>`;
+ else if(done&&!learn)right=`<span class="chip c-Completed">Completed${isTest&&last?.total?` · ${last.score}/${last.total}`:""}</span>`;
+ else right=`${done&&last?`<span class="chip c-Completed">${last.score}/${last.total}</span>`:""}<button class="${done?"soft":"primary"}" data-act="rstart" data-id="${a.id}" data-ctx="${it.ctx}">${open?"Continue":done?"Try again":"Start"}</button>`;
+ return `<div class="activity"><div class="badge">${a.segment||a.skill||KIND[a.kind]}</div><div class="info"><b>${esc(a.title)}</b><div class="muted small">${a.n} ${a.kind==="questionnaire"?"statements":"questions"}${learn&&anx?" · short feelings check first":""}</div></div>${right}</div>`}
+async function researchHome(){
+ const r=R();
+ if(r.view==="process")return processPage();
+ if(r.view==="run")return RUN.page();
+ const [st,banner]=await Promise.all([loadState(),liveBanner()]);const I=stepInfo(st);
+ const stepCard=(s,i)=>{const locked=!!s.lock;
+  return `<div class="jstep ${s.done?"is-done":locked?"is-locked":"is-open"}"><div class="jnum">${s.done?"✓":i+3}</div><div class="jbody"><div class="row"><h3>${s.n}</h3>${s.done?'<span class="chip c-Completed">Done</span>':locked?'<span class="chip c-Locked">Locked</span>':'<span class="chip c-Available">Open</span>'}</div><p class="muted small">${s.d}</p>
+  ${locked?`<p class="lockmsg">🔒 ${s.lock}</p>`:""}${s.items.length?`<div class="stack">${s.items.map(it=>itemRow(it,locked,I.anx)).join("")}</div>`:(!locked?'<p class="muted small">Nothing has been added here yet.</p>':"")}</div></div>`};
+ return `${banner}<div class="head"><div class="eyebrow">${esc(sp?.verified?"Research ID "+sp.research_id:"Research participant")}</div><h1>Hello, ${esc((profile.full_name||"").split(" ")[0])}</h1><p>Your research journey. Complete the steps in order.</p></div>
+ <div class="journey">
+  <div class="jstep ${I.read?"is-done":"is-open"}"><div class="jnum">${I.read?"✓":1}</div><div class="jbody"><div class="row"><h3>How this research works</h3>${I.read?'<span class="chip c-Completed">Read</span>':""}</div><p class="muted small">See what will happen, step by step, before you agree to take part.</p><button class="${I.read?"soft":"primary"}" data-act="rview" data-v="process">${I.read?"Read again":"See how it works"}</button></div></div>
+  <div class="jstep ${I.consent?"is-done":I.read?"is-open":"is-locked"}"><div class="jnum">${I.consent?"✓":2}</div><div class="jbody"><div class="row"><h3>Consent</h3>${I.consent?'<span class="chip c-Completed">Given</span>':""}</div>
+   ${I.consent?`<p class="muted small">You agreed to take part on ${fmtDT(st.progress.consent_at)}. You can withdraw at any time by telling the researcher.</p>`:I.read?`<form data-form="consent" class="stack"><label class="check"><input type="checkbox" name="agree" required> <span>I have read how the research works. I understand that taking part is voluntary, that my scores and answers will be used for research with my name removed, and that I can stop at any time. I agree to take part.</span></label><button class="primary">I agree, continue</button></form>`:'<p class="lockmsg">🔒 Read how the research works first.</p>'}</div></div>
+  ${I.steps.map(stepCard).join("")}
+ </div>`}
+function processPage(){
+ const st=S.rs,read=!!st?.progress?.process_read_at;
+ const steps=[["Read and agree","You read this page and tick the consent box. Taking part is your choice."],["Questionnaire","A short questionnaire about how you feel when you use English. You answer on a five-point scale from Strongly disagree to Strongly agree."],
+  ["Pre-test","One test for each of the six skills: Listening, Speaking, Reading, Writing, Grammar and Vocabulary. Before and after each test you set a confidence meter."],
+  ["Interventions","Flipped-learning sessions. You study a podcast, a video, a graphic novel or mixed material, then answer a quiz. When an answer is wrong you see an explanation. A very short feelings check comes before each session."],
+  ["Post-test","One final test covering all the skills, so your progress can be compared with the pre-test."],["Final questionnaire","A last questionnaire about your experience. It opens only after the post-test."]];
+ return `<div class="head"><div class="eyebrow">THE RESEARCH PROCESS</div><h1>How this research works</h1><p>This study looks at how coastal stories and flipped teaching can help undergraduate students learn English.</p></div>
+ <div class="card"><div class="timeline">${steps.map((s,i)=>`<div class="tl"><b>${i+1}</b><div><h3>${s[0]}</h3><p class="muted">${s[1]}</p></div></div>`).join("")}</div>
+ <div class="notice"><b>Your information.</b> Your attendance, scores, questionnaire answers and confidence ratings are recorded. The researcher and your professors can see them, including messages in the discussion area. Results are reported without names. You may ask questions or withdraw at any time by writing to the researcher.</div>
+ <div class="actions">${read?'<button class="primary" data-act="rview" data-v="">Back to my steps</button>':'<button class="primary" data-act="rack">I have read this</button>'}</div></div>`}
+
+/* ---------- activity runner (students, and staff preview) ---------- */
+const RUN={st:null,
+ busy(){return !!(RUN.st&&RUN.st.phase==="q"&&!RUN.st.preview)},
+ key(){return "llc_run_"+RUN.st.attempt},
+ async begin(a,ctx){ /* a = entry from research_state */
+  const I=stepInfo(S.rs);
+  if(a.purpose==="intervention"||a.purpose==="posttest"){const c=a.purpose==="posttest"?"post":"int:"+a.id;
+   if(I.anx&&!doneOf(I.anx,c)&&!attOf(a).some(t=>t.status==="open")){RUN.st={phase:"chain",next:a,meta:I.anx,ctx:c};return RUN.open(I.anx,c)}}
+  const open=attOf(a,ctx).find(t=>t.status==="open");
+  if(a.kind==="questionnaire"||open)return RUN.open(a,ctx,null);
+  RUN.st={phase:"conf",meta:a,ctx};setR({view:"run"})},
+ async open(a,ctx,conf){
+  const r=await rpc("start_activity",{p_activity:a.id,p_context:ctx||"",p_conf:conf??null});
+  const prev=RUN.st?.phase==="chain"?RUN.st.next:null;
+  RUN.st={phase:"q",attempt:r.attempt,act:r.activity,learn:r.learn,ctx,i:0,ans:{},fb:{},next:prev};
+  const act=r.activity;
+  if(r.learn){Object.entries(r.answers||{}).forEach(([k,v])=>RUN.st.ans[k]=v);RUN.st.i=Math.min(Object.keys(RUN.st.ans).length,act.questions.length-1);RUN.st.resumed=Object.keys(RUN.st.ans).length>0}
+  else{const sv=lsGet(RUN.key());if(sv)RUN.st.ans=sv}
+  setR({view:"run"})},
+ preview(act,keys){RUN.st={phase:"q",preview:true,act,keys,learn:true,i:0,ans:{},fb:{}};setR({...R(),view:"preview"})},
+ page(){const s=RUN.st;if(!s)return `<div class="card">Nothing is open. <button class="soft" data-act="rview" data-v="">Back</button></div>`;
+  if(s.phase==="conf")return confCard("How confident do you feel right now?",`Before you start <b>${esc(s.meta.title)}</b>, slide to show how confident you feel about it.`,"Save my check-in and start","confstart");
+  if(s.phase==="result")return RUN.result();
+  if(s.act.kind==="questionnaire")return RUN.likert();
+  return RUN.quiz()},
+ likert(){const a=RUN.st.act;
+  return `<div class="head"><div class="eyebrow">${a.purpose==="anxiety"?"FEELINGS CHECK":"QUESTIONNAIRE"}</div><h1>${esc(a.title)}</h1><p>${esc(a.intro||"Choose the answer that best matches how you feel. There are no right or wrong answers.")}</p></div>
+  <form data-form="likert" class="card stack"><div class="likert-scale small muted">${LIKERT.map((l,i)=>`<span>${i+1} = ${l}</span>`).join("")}</div>
+  ${a.questions.map((q,i)=>`<fieldset class="likert-row"><legend>${i+1}. ${esc(q.q)}</legend><div class="likert-opts">${LIKERT.map((l,v)=>`<label title="${l}"><input type="radio" name="q${i}" value="${v+1}" required><span>${v+1}</span><em>${l}</em></label>`).join("")}</div></fieldset>`).join("")}
+  <button class="primary">Submit</button></form>`},
+ media(a){const u=a.media_url;if(!u)return "";const y=ytId(u);
+  if(y)return `<div class="player"><iframe src="https://www.youtube-nocookie.com/embed/${y}?rel=0" title="Video" allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`;
+  if(!/^https:\/\//i.test(u))return "";
+  if(/\.(mp3|m4a|wav|ogg)(\?|$)/i.test(u))return `<audio controls src="${esc(u)}" style="width:100%"></audio>`;
+  if(/\.(png|jpe?g|gif|webp)(\?|$)/i.test(u))return `<img src="${esc(u)}" alt="" class="media-img">`;
+  return `<a class="soft linkbtn" href="${esc(u)}" target="_blank" rel="noopener">Open the ${esc((a.segment||"material").toLowerCase())} ↗</a>`},
+ qbody(q,i,given,locked){
+  const tiles=(opts)=>`<div class="tiles t${opts.length}">${opts.map((o,oi)=>`<button type="button" class="tile c${oi%4}${given===oi?" picked":""}" ${locked?"disabled":""} data-act="pick" data-v="${oi}"><span>${"ABCD"[oi]||""}</span>${esc(o)}</button>`).join("")}</div>`;
+  if(q.type==="tf")return `<div class="qtext">${esc(q.q)}</div>${tiles(["True","False"])}`;
+  if(q.type==="ar")return `<div class="qtext"><div class="ar"><b>Assertion (A)</b> ${esc(q.assertion)}</div><div class="ar"><b>Reason (R)</b> ${esc(q.reason)}</div></div>${tiles(AR_OPTS)}`;
+  if(q.type==="match"){const g=Array.isArray(given)?given:[];
+   return `<div class="qtext">${esc(q.q||"Match each item with its pair.")}</div><div class="match">${q.left.map((l,li)=>`<div class="mrow"><span>${esc(l)}</span><select data-chg="pickmatch" data-li="${li}" ${locked?"disabled":""}><option value="">Choose…</option>${q.right.map((r,ri)=>`<option value="${ri}" ${g[li]===ri?"selected":""}>${esc(r)}</option>`).join("")}</select></div>`).join("")}</div>${locked?"":`<button type="button" class="primary" data-act="lockmatch">${RUN.st?.learn?"Check answer":"Save answer"}</button>`}`}
+  return `<div class="qtext">${esc(q.q)}</div>${tiles(q.options||[])}`},
+ ansText(q,k){if(q.type==="tf")return ["True","False"][k];if(q.type==="ar")return "ABCD"[k]+". "+AR_OPTS[k];if(q.type==="match")return q.left.map((l,i)=>`${l} → ${q.right[k[i]]}`).join("; ");return q.options?.[k]},
+ quiz(){const s=RUN.st,a=s.act,n=a.questions.length,i=s.i,q=a.questions[i],given=s.ans[i],fb=s.fb[i],answered=Object.keys(s.ans).filter(k=>s.ans[k]!=null&&!(Array.isArray(s.ans[k])&&s.ans[k].some(x=>x==null))).length;
+  const lockedQ=s.learn&&!!fb;
+  const fbBox=fb?`<div class="fb ${fb.correct?"good":"bad"}"><b>${fb.correct?"✓ Correct":"✗ Not quite"}</b>${fb.correct?"":`<div>Correct answer: <b>${esc(RUN.ansText(q,fb.answer))}</b></div>`}${fb.explanation&&(!fb.correct||s.preview)?`<div class="expl"><b>Explanation.</b> ${esc(fb.explanation)}</div>`:""}</div>`:"";
+  const nav=s.learn
+   ?`<div class="actions">${fb||s.resumed&&given!=null?`<button class="primary" data-act="${i<n-1?"qnext":"qfinish"}">${i<n-1?"Next question →":s.preview?"End preview":"Finish and see my score"}</button>`:""}</div>`
+   :`<div class="actions"><button class="outline" data-act="qprev" ${i===0?"disabled":""}>← Previous</button>${i<n-1?`<button class="primary" data-act="qnext">Next →</button>`:`<button class="primary" data-act="qfinish">Submit test (${answered}/${n} answered)</button>`}</div>
+     <div class="palette">${a.questions.map((_,j)=>`<button type="button" data-act="qgo" data-i="${j}" class="${j===i?"cur":""} ${s.ans[j]!=null?"ans":""}">${j+1}</button>`).join("")}</div>`;
+  const qcard=`<div class="card qcard"><div class="row"><span class="badge">Question ${i+1} of ${n}</span><span class="muted small">${({mcq:"Multiple choice",tf:"True or false",ar:"Assertion and reason",match:"Match the following"})[q.type]||""}</span></div><div class="bar"><i style="width:${Math.round(100*(i+(fb||(!s.learn&&given!=null)?1:0))/n)}%"></i></div>${RUN.qbody(q,i,given,lockedQ)}${fbBox}${nav}</div>`;
+  const head=`<div class="head"><div class="eyebrow">${s.preview?"PREVIEW · ":""}${PURPOSE[a.purpose].toUpperCase()}${a.segment?" · "+a.segment.toUpperCase():""}${a.skill?" · "+a.skill.toUpperCase():""}</div><h1>${esc(a.title)}</h1>${a.intro?`<p>${esc(a.intro)}</p>`:""}</div>`;
+  const media=RUN.media(a);
+  if(a.kind==="reading"||a.passage)return `${head}${media}<div class="readwrap"><div class="card passage-pane"><div class="passage-body">${cleanHTML(a.passage)}</div></div><div>${qcard}</div></div>`;
+  return `${head}${media?`<div class="card">${media}</div>`:""}${qcard}`},
+ result(){const s=RUN.st,r=s.res,a=s.act,p=Math.round(100*r.score/Math.max(1,r.total));
+  const review=r.keys?`<div class="card"><h3>Review</h3>${a.questions.map((q,i)=>`<div class="qbox ${r.correct[i]?"right":"wrong"}"><b>${i+1}. ${esc(q.q||q.assertion||"Match the following")}</b> ${r.correct[i]?"✓":"✗"}<div class="small">Correct answer: ${esc(RUN.ansText(q,r.keys[i].answer))}</div>${!r.correct[i]&&r.keys[i].explanation?`<div class="expl small"><b>Explanation.</b> ${esc(r.keys[i].explanation)}</div>`:""}</div>`).join("")}</div>`:"";
+  return `<div class="card result"><div class="eyebrow">${PURPOSE[a.purpose].toUpperCase()} SUBMITTED</div><h1>${r.score} / ${r.total}</h1><p class="muted">${esc(a.title)} · ${p}%</p></div>
+  ${s.confDone?`<div class="actions"><button class="primary" data-act="rview" data-v="">Back to my steps</button></div>`:confCard("How confident do you feel now?","Now that you have finished, slide to show how confident you feel about this skill.","Save my check-in","confafter")}${review}`}};
+
+Object.assign(FORM,{
+ async consent(){await rpc("research_ack",{p_step:"consent"});toast("Thank you. Your consent is recorded.");render()},
+ async confstart(f,d){const s=RUN.st;await RUN.open(s.meta,s.ctx,+d.get("conf"))},
+ async confafter(f,d){await rpc("set_conf_after",{p_attempt:RUN.st.attempt,p_value:+d.get("conf")});RUN.st.confDone=true;toast("Check-in saved.");render()},
+ async likert(f,d){if(RUN.st.preview)return toast("This is a preview. Nothing is recorded.");const s=RUN.st,n=s.act.questions.length,a=[];for(let i=0;i<n;i++)a.push(+d.get("q"+i));
+  await rpc("finish_activity",{p_attempt:s.attempt,p_answers:a});toast("Thank you. Your answers are saved.");const nx=s.next;RUN.st=null;await loadState();
+  if(nx){const fresh=S.rs.activities.find(x=>x.id===nx.id);return RUN.begin(fresh,"")}
+  setR({})}});
+Object.assign(ACT,{
+ back(){history.back()},
+ rview(el){stopTimers();if(el.dataset.v==="")RUN.st=null;setR(el.dataset.v?{view:el.dataset.v}:{})},
+ async rack(){await rpc("research_ack",{p_step:"process"});await loadState();toast("Thank you. Now tick the consent box.");setR({})},
+ async rstart(el){const st=S.rs||await loadState();const a=st.activities.find(x=>x.id===el.dataset.id);if(a)await RUN.begin(a,el.dataset.ctx||"")},
+ async pick(el){const s=RUN.st;if(!s||s.phase!=="q")return;const v=+el.dataset.v;await RUN_answer(v)},
+ async lockmatch(){const s=RUN.st,q=s.act.questions[s.i],g=s.ans[s.i]||[];if(g.length<q.left.length||g.some(x=>x==null||x===""))return toast("Match every item first.");await RUN_answer(g,true)},
+ qnext(){const s=RUN.st;if(s.i<s.act.questions.length-1){s.i++;s.resumed=false;render();window.scrollTo(0,0)}},
+ qprev(){const s=RUN.st;if(s.i>0){s.i--;render()}},
+ qgo(el){RUN.st.i=+el.dataset.i;render()},
+ async qfinish(){const s=RUN.st,a=s.act,n=a.questions.length;
+  if(s.preview){RUN.st=null;return setR({view:"edit",id:R().id})}
+  let payload=null;
+  if(!s.learn){const arr=[];for(let i=0;i<n;i++){const v=s.ans[i];if(v==null||(Array.isArray(v)&&(v.length<a.questions[i].left.length||v.some(x=>x==null)))){s.i=i;render();return toast(`Question ${i+1} is not answered yet.`)}arr.push(v)}
+   if(!confirm("Submit the test? You cannot change your answers afterwards."))return;payload=arr}
+  else if(Object.keys(s.ans).length<n&&!confirm("Some questions are not answered. Finish anyway?"))return;
+  const res=await rpc("finish_activity",{p_attempt:s.attempt,p_answers:payload});lsDel(RUN.key());
+  s.phase="result";s.res=res;try{playFeedbackSound(res.score/res.total>=.6);if(s.learn)showQuoteModal(res.score/res.total>=.6?"good":"low",`You scored ${res.score} out of ${res.total}`)}catch{};render();window.scrollTo(0,0)}});
+async function RUN_answer(v,isMatch){const s=RUN.st,i=s.i;
+ if(s.learn){if(s.fb[i])return;
+  if(s.preview){const k=s.keys[i]||{};s.ans[i]=v;s.fb[i]={correct:JSON.stringify(v)===JSON.stringify(k.answer),answer:k.answer,explanation:k.explanation}}
+  else{const r=await rpc("answer_question",{p_attempt:s.attempt,p_idx:i,p_answer:v});s.ans[i]=r.given;s.fb[i]=r}
+  try{playFeedbackSound(s.fb[i].correct)}catch{}}
+ else{s.ans[i]=v;lsSet(RUN.key(),s.ans)}
+ render()}
+CHG.pickmatch=el=>{const s=RUN.st,i=s.i,q=s.act.questions[i];const g=Array.isArray(s.ans[i])?[...s.ans[i]]:Array(q.left.length).fill(null);g[+el.dataset.li]=el.value===""?null:+el.value;s.ans[i]=g;if(!s.learn){lsSet(RUN.key(),s.ans);if(!g.some(x=>x==null)){const p=document.querySelector(".palette .cur");p&&p.classList.add("ans")}}};
+document.addEventListener("input",e=>{const el=e.target.closest("[data-inp=conf]");if(!el)return;const v=+el.value;const g=$("confGauge"),w=$("confWord");if(g)g.innerHTML=gauge(v);if(w)w.textContent=CONF_WORDS[v]});
+addEventListener("beforeunload",e=>{if(RUN.busy()&&!RUN.st.learn){e.preventDefault();e.returnValue=""}});
+
+/* ---------- student: practice (flashcards and practice quizzes) ---------- */
+async function practiceTab(){
+ const r=R();
+ if(r.view==="run")return RUN.page();
+ if(r.view==="cards")return cardsPage(r.id);
+ const st=await loadState(),items=st.activities.filter(a=>a.purpose==="practice");
+ return `<div class="head"><div class="eyebrow">PRACTICE</div><h1>Flashcards and practice</h1><p>Extra practice from your teachers. These do not count towards the research tests.</p></div>
+ <div class="stack">${items.map(a=>`<div class="card activity"><div class="badge">${KIND[a.kind]}</div><div class="info"><b>${esc(a.title)}</b><div class="muted small">${a.n} ${a.kind==="flashcards"?"cards":"questions"}${a.skill?" · "+a.skill:""}</div></div>${a.kind==="flashcards"?`<button class="primary" data-act="cards" data-id="${a.id}">Open cards</button>`:`<button class="primary" data-act="rstart" data-id="${a.id}" data-ctx="">${attOf(a).some(t=>t.status==="open")?"Continue":"Start"}</button>`}</div>`).join("")||'<div class="empty">No practice sets yet.</div>'}</div>`}
+async function cardsPage(id,preview){
+ const a=preview||await ok(db.from("activities").select("*").eq("id",id).single());const r=R();const n=a.cards.length;if(!n)return '<div class="card">This set has no cards yet.</div>';
+ const i=Math.min(r.ci||0,n-1),c=a.cards[i];
+ return `<div class="head"><div class="eyebrow">${preview?"PREVIEW · ":""}FLASHCARDS</div><h1>${esc(a.title)}</h1><p>Tap the card to turn it over.</p></div>
+ <div class="flash ${r.flip?"flipped":""}" data-act="flip" role="button" tabindex="0" aria-label="Flashcard, tap to turn"><div class="flash-in"><div class="flash-f"><span>${esc(c.front)}</span></div><div class="flash-b"><span>${esc(c.back)}</span></div></div></div>
+ <div class="actions flash-nav"><button class="outline" data-act="cardgo" data-d="-1" ${i===0?"disabled":""}>← Previous</button><span class="badge">${i+1} / ${n}</span><button class="primary" data-act="cardgo" data-d="1" ${i===n-1?"disabled":""}>Next →</button></div>`}
+Object.assign(ACT,{cards(el){setR({view:"cards",id:el.dataset.id,ci:0})},flip(){const r=R();r.flip=!r.flip;document.querySelector(".flash")?.classList.toggle("flipped",r.flip)},
+ cardgo(el){const r=R();r.ci=(r.ci||0)+ +el.dataset.d;r.flip=false;render()}});
+
+/* =====================================================================
+   v6 MODULE: My library, activity builder, research control, attendance
+   ===================================================================== */
+async function fetchAll(table,cols="*",mod){const out=[];for(let from=0;;from+=1000){let q=db.from(table).select(cols);if(mod)q=mod(q);const rows=await ok(q.range(from,from+999));out.push(...rows);if(rows.length<1000)break}return out}
+const band=p=>p==null?"-":p>=80?"Excellent":p>=60?"Good":p>=40?"Developing":"Needs support";
+const isStaff=()=>["teacher","researcher"].includes(role());
+let ED=null;
+const blankQ=kind=>kind==="questionnaire"?{type:"likert"}:{type:"mcq"};
+function newED(kind){ED={id:null,locked:false,qi:null,qf:blankQ(kind),keys:[],data:{kind,purpose:kind==="questionnaire"?"anxiety":kind==="flashcards"?"practice":"pretest",title:"",skill:"",segment:"",media_url:"",intro:"",passage:"",cards:[],questions:[],status:"draft",sort:0}}}
+async function loadED(id){const [a,k,att]=await Promise.all([ok(db.from("activities").select("*").eq("id",id).single()),ok(db.from("activity_keys").select("keys").eq("activity_id",id).maybeSingle()),ok(db.from("activity_attempts").select("id").eq("activity_id",id).limit(1))]);
+ ED={id,locked:att.length>0,qi:null,qf:blankQ(a.kind),keys:k?.keys||[],data:{kind:a.kind,purpose:a.purpose,title:a.title,skill:a.skill||"",segment:a.segment||"",media_url:a.media_url||"",intro:a.intro||"",passage:a.passage||"",cards:a.cards||[],questions:a.questions||[],status:a.status,sort:a.sort||0}}}
+const purposesFor=k=>k==="questionnaire"?["anxiety","pre_questionnaire","post_questionnaire"]:k==="flashcards"?["practice"]:["pretest","intervention","posttest","practice"];
+function edSync(){if(!ED)return;const d=ED.data;document.querySelectorAll("[data-ed]").forEach(el=>{d[el.dataset.ed]=el.dataset.ed==="sort"?(+el.value||0):el.value});
+ const p=$("edPassage");if(p)d.passage=cleanHTML(p.innerHTML);
+ const c=$("edCards");if(c)d.cards=c.value.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{const m=l.split(/\s*\|\s*|\s+[-–:]\s+|\t/);return {front:(m[0]||"").trim(),back:m.slice(1).join(" - ").trim()}}).filter(x=>x.front&&x.back);
+ const f=document.querySelector("form[data-form=edq]");if(f){const fd=new FormData(f);ED.qf={...ED.qf,...Object.fromEntries(fd.entries()),reverse:fd.get("reverse")==="on"}}}
+function shuffleIdx(n){const a=[...Array(n).keys()];for(let i=n-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}if(n>1&&a.every((v,i)=>v===i))[a[0],a[1]]=[a[1],a[0]];return a}
+/* turn the form / an import line into {q (student view), k (hidden key)} */
+function buildQ(f){const t=f.type,ex=(f.explanation||"").trim()||undefined,sk=f.skill||undefined;const need=(v,m)=>{if(!String(v||"").trim())throw new Error(m);return String(v).trim()};
+ if(t==="likert")return {q:{type:"likert",q:need(f.q,"Type the statement."),...(f.reverse?{reverse:true}:{})},k:{}};
+ if(t==="tf"){if(!["0","1",0,1].includes(f.answer))throw new Error("Choose True or False as the answer.");return {q:{type:"tf",q:need(f.q,"Type the statement."),skill:sk},k:{answer:+f.answer,explanation:ex}}}
+ if(t==="ar"){if(f.answer===""||f.answer==null)throw new Error("Choose the correct option.");return {q:{type:"ar",assertion:need(f.assertion,"Type the assertion."),reason:need(f.reason,"Type the reason."),skill:sk},k:{answer:+f.answer,explanation:ex}}}
+ if(t==="match"){const pairs=String(f.pairs||"").split(/\n|;/).map(l=>l.trim()).filter(Boolean).map(l=>l.split(/\s*=\s*/));if(pairs.length<2||pairs.some(p=>p.length!==2||!p[0]||!p[1]))throw new Error("Write at least two pairs, one per line, as  left = right");
+  const sh=shuffleIdx(pairs.length);return {q:{type:"match",q:(f.q||"").trim()||"Match the following.",left:pairs.map(p=>p[0]),right:sh.map(i=>pairs[i][1]),skill:sk},k:{answer:pairs.map((_,i)=>sh.indexOf(i)),explanation:ex}}}
+ const opts=[f.o0,f.o1,f.o2,f.o3].map(o=>String(o||"").trim());const used=opts.filter(Boolean);if(used.length<2)throw new Error("Give at least two options.");
+ const ai=+f.answer;if(f.answer===""||f.answer==null||!opts[ai])throw new Error("Choose which option is correct.");
+ return {q:{type:"mcq",q:need(f.q,"Type the question."),options:used,skill:sk},k:{answer:used.indexOf(opts[ai]),explanation:ex}}}
+function qToForm(q,k){if(q.type==="likert")return {type:"likert",q:q.q,reverse:!!q.reverse};const b={type:q.type,explanation:k.explanation||"",skill:q.skill||""};
+ if(q.type==="tf")return {...b,q:q.q,answer:String(k.answer)};if(q.type==="ar")return {...b,assertion:q.assertion,reason:q.reason,answer:String(k.answer)};
+ if(q.type==="match")return {...b,q:q.q,pairs:q.left.map((l,i)=>`${l} = ${q.right[k.answer[i]]}`).join("\n")};
+ return {...b,q:q.q,o0:q.options[0]||"",o1:q.options[1]||"",o2:q.options[2]||"",o3:q.options[3]||"",answer:String(k.answer)}}
+function parseImport(txt,kind){const out=[],errs=[];String(txt||"").split("\n").map(l=>l.trim()).filter(Boolean).forEach((l,i)=>{const p=l.split("|").map(x=>x.trim()),t=(p[0]||"").toUpperCase();
+ try{let f;const L=x=>{const k="ABCD".indexOf(String(x||"").toUpperCase());if(k<0||String(x).length!==1)throw new Error("the answer must be A, B, C or D");return String(k)};
+  if(kind==="questionnaire"){if(t==="LIKERT")f={type:"likert",q:p[1],reverse:/^r/i.test(p[2]||"")};else f={type:"likert",q:p[0],reverse:/^r/i.test(p[1]||"")}}
+  else if(t==="MCQ"){if(p.length<7)throw new Error("needs: MCQ | question | A | B | C | D | answer | explanation");f={type:"mcq",q:p[1],o0:p[2],o1:p[3],o2:p[4],o3:p[5],answer:L(p[6]),explanation:p[7]}}
+  else if(t==="TF"){if(!/^(t|f|true|false)$/i.test(p[2]||""))throw new Error("needs: TF | statement | T or F | explanation");f={type:"tf",q:p[1],answer:/^t/i.test(p[2])?"0":"1",explanation:p[3]}}
+  else if(t==="AR"){f={type:"ar",assertion:p[1],reason:p[2],answer:L(p[3]),explanation:p[4]}}
+  else if(t==="MATCH"){f={type:"match",q:p[1],pairs:p[2],explanation:p[3]}}
+  else throw new Error("start the line with MCQ, TF, AR or MATCH");
+  out.push(buildQ(f))}catch(e){errs.push(`Line ${i+1}: ${e.message}`)}});return {out,errs}}
+const qLabel=q=>q.q||q.assertion||"Match the following";
+const typeName={mcq:"Multiple choice",tf:"True / False",ar:"Assertion & reason",match:"Match the following",likert:"Statement (1–5)"};
+
+async function libraryTab(){
+ const r=R();
+ if((r.view==="edit"||r.view==="preview")&&!ED){if(r.id)await loadED(r.id);else r.view=null}
+ if(r.view==="edit")return editorPage();
+ if(r.view==="preview")return previewPage();
+ if(r.view==="results")return resultsPage(r.id);
+ if(r.view==="perf")return perfPage();
+ if(r.view==="host")return hostPage();
+ ED=null;RUN.st=null;
+ const [acts,atts]=await Promise.all([ok(db.from("activities").select("*").order("sort").order("created_at")),fetchAll("activity_attempts","activity_id,student_id,status")]);
+ const cnt={};atts.filter(a=>a.status==="done").forEach(a=>(cnt[a.activity_id]=cnt[a.activity_id]||new Set()).add(a.student_id));
+ const f=r.f||"all",shown=acts.filter(a=>f==="all"||a.status===f);
+ const row=a=>{const n=a.kind==="flashcards"?a.cards.length:a.questions.length,tg=TARGET[a.purpose];
+  return `<div class="card lib-row"><div class="lib-main"><div class="row"><b>${esc(a.title)}</b><span class="chip ${a.status==="published"?"c-Completed":"c-Inprogress"}">${a.status==="published"?"Published":"Draft"}</span></div>
+  <div class="muted small">${KIND[a.kind]}${a.skill?" · "+a.skill:""}${a.segment?" · "+a.segment:""} · ${n} ${a.kind==="flashcards"?"cards":a.kind==="questionnaire"?"statements":"questions"}${tg&&a.kind!=="flashcards"?` (target ${tg})`:""} · ${(cnt[a.id]?.size)||0} students completed</div></div>
+  <div class="lib-acts"><button class="soft" data-act="libedit" data-id="${a.id}">Edit</button><button class="soft" data-act="libprev" data-id="${a.id}">Preview</button><button class="soft" data-act="libpub" data-id="${a.id}" data-s="${a.status==="published"?"draft":"published"}">${a.status==="published"?"Unpublish":"Publish"}</button>
+  ${["quiz","reading"].includes(a.kind)?`<button class="soft" data-act="libhost" data-id="${a.id}">Host live</button>`:""}<button class="soft" data-act="libres" data-id="${a.id}">Results</button><button class="soft" data-act="libdup" data-id="${a.id}">Duplicate</button><button class="outline danger" data-act="libdel" data-id="${a.id}">Delete</button></div></div>`};
+ const groups=Object.keys(PURPOSE).map(p=>[p,shown.filter(a=>a.purpose===p)]).filter(g=>g[1].length);
+ return `<div class="head"><div class="eyebrow">MY LIBRARY</div><h1>Activities and content</h1><p>Create, preview, publish and remove everything students see in the research steps.</p></div>
+ <div class="createbar">${[["quiz","✎","Quiz","Multiple choice, true/false, assertion-reason, matching"],["reading","☰","Reading passage","A passage with questions beside it"],["flashcards","❏","Flashcards","Term on the front, meaning on the back"],["questionnaire","◔","Questionnaire","Statements on a five-point scale"]].map(c=>`<button class="createtile" data-act="libnew" data-k="${c[0]}"><i>${c[1]}</i><b>${c[2]}</b><span>${c[3]}</span></button>`).join("")}</div>
+ <div class="row" style="margin:18px 0 10px"><div class="seg">${[["all","All"],["draft","Drafts"],["published","Published"]].map(x=>`<button data-act="libf" data-f="${x[0]}" class="${f===x[0]?"on":""}">${x[1]} (${acts.filter(a=>x[0]==="all"||a.status===x[0]).length})</button>`).join("")}</div><button class="soft" data-act="rview" data-v="perf">Students by performance</button></div>
+ ${groups.map(([p,list])=>`<h3 class="libh">${PURPOSE[p]}</h3><div class="stack">${list.map(row).join("")}</div>`).join("")||'<div class="empty">Nothing here yet. Choose a type above to create your first activity.</div>'}`}
+
+function editorPage(){
+ const d=ED.data,isQ=d.kind==="questionnaire",isF=d.kind==="flashcards",n=d.questions.length,tg=TARGET[d.purpose],f=ED.qf,lock=ED.locked;
+ const sel=(name,opts,val)=>`<select data-ed="${name}" data-chg="edre">${opts.map(o=>`<option value="${o[0]}" ${String(val)===String(o[0])?"selected":""}>${o[1]}</option>`).join("")}</select>`;
+ const skillSel=(nm,val)=>`<select name="${nm}"><option value="">Same as activity</option>${SK.map(k=>`<option ${val===k?"selected":""}>${k}</option>`).join("")}</select>`;
+ const ansSel=(labels,val)=>`<select name="answer"><option value="">Choose…</option>${labels.map((l,i)=>`<option value="${i}" ${String(val)===String(i)?"selected":""}>${l}</option>`).join("")}</select>`;
+ let qfields="";
+ if(f.type==="likert")qfields=`<label>Statement<textarea name="q" rows="2">${esc(f.q||"")}</textarea></label><label class="check"><input type="checkbox" name="reverse" ${f.reverse?"checked":""}> <span>Positively worded (reverse-scored), e.g. "I feel confident when I speak English."</span></label>`;
+ else if(f.type==="tf")qfields=`<label>Statement<textarea name="q" rows="2">${esc(f.q||"")}</textarea></label><label>Correct answer${ansSel(["True","False"],f.answer)}</label>`;
+ else if(f.type==="ar")qfields=`<label>Assertion (A)<textarea name="assertion" rows="2">${esc(f.assertion||"")}</textarea></label><label>Reason (R)<textarea name="reason" rows="2">${esc(f.reason||"")}</textarea></label><label>Correct option${ansSel(AR_OPTS.map((o,i)=>"ABCD"[i]+". "+o),f.answer)}</label>`;
+ else if(f.type==="match")qfields=`<label>Instruction<input name="q" value="${esc(f.q||"Match the following.")}"></label><label>Pairs, one per line, written as <code>left = right</code><textarea name="pairs" rows="5" placeholder="tide = rise and fall of the sea&#10;net = used to catch fish">${esc(f.pairs||"")}</textarea></label><p class="muted small">The right-hand side is shuffled for students.</p>`;
+ else qfields=`<label>Question<textarea name="q" rows="2">${esc(f.q||"")}</textarea></label><div class="form-grid">${[0,1,2,3].map(i=>`<label>Option ${"ABCD"[i]}<input name="o${i}" value="${esc(f["o"+i]||"")}"></label>`).join("")}</div><label>Correct option${ansSel(["A","B","C","D"],f.answer)}</label>`;
+ const qform=isF?"":`<form data-form="edq" class="card stack"><div class="row"><h3>${ED.qi!=null?`Edit question ${ED.qi+1}`:isQ?"Add a statement":"Add a question"}</h3>${lock?'<span class="chip c-Locked">Locked</span>':""}</div>
+  ${lock?'<div class="notice">Students have already taken this activity, so its questions cannot be changed. Use <b>Duplicate</b> in My library to make a new version.</div>':`
+  ${isQ?'<input type="hidden" name="type" value="likert">':`<label>Question type<select name="type" data-chg="qtype">${["mcq","tf","ar","match"].map(t=>`<option value="${t}" ${f.type===t?"selected":""}>${typeName[t]}</option>`).join("")}</select></label>`}
+  ${qfields}${isQ?"":`<label>Explanation (shown to students after a wrong answer in interventions and practice)<textarea name="explanation" rows="2">${esc(f.explanation||"")}</textarea></label>${d.purpose==="posttest"?`<label>Skill this question tests${skillSel("skill",f.skill)}</label>`:""}`}
+  <div class="actions"><button class="primary">${ED.qi!=null?"Update question":"Add to list"}</button>${ED.qi!=null?'<button type="button" class="outline" data-act="edqcancel">Cancel</button>':""}</div>`}</form>
+  ${lock?"":`<details class="card"><summary>Import many ${isQ?"statements":"questions"} at once</summary><form data-form="edimport" class="stack" style="margin-top:12px"><p class="muted small">${isQ?"One statement per line. Add <code>| R</code> at the end of positively worded statements that must be reverse-scored.":"One question per line, parts separated by <code>|</code>:<br><code>MCQ | question | A | B | C | D | answer letter | explanation</code><br><code>TF | statement | T or F | explanation</code><br><code>AR | assertion | reason | answer letter | explanation</code><br><code>MATCH | instruction | left=right; left=right | explanation</code>"}</p>
+  <textarea name="txt" id="edImportTxt" rows="8"></textarea><label>Or choose a text or CSV file in this format<input type="file" accept=".txt,.csv,text/plain" data-chg="edfile"></label><button class="soft">Import</button></form></details>`}`;
+ const side=isF?"":`<div class="card qlist"><div class="row"><h3>${isQ?"Statements":"Questions"} (${n}${tg?` / ${tg}`:""})</h3></div>${tg?`<div class="bar"><i style="width:${Math.min(100,Math.round(100*n/tg))}%"></i></div>`:""}
+  ${d.questions.map((q,i)=>`<div class="qitem ${ED.qi===i?"cur":""}"><div><span class="muted small">Q${i+1} · ${typeName[q.type]}${q.reverse?" · reversed":""}${q.skill?" · "+q.skill:""}</span><div>${esc(qLabel(q))}</div></div>${lock?"":`<div class="qbtns"><button type="button" title="Move up" data-act="edqmove" data-i="${i}" data-d="-1" ${i===0?"disabled":""}>↑</button><button type="button" title="Move down" data-act="edqmove" data-i="${i}" data-d="1" ${i===n-1?"disabled":""}>↓</button><button type="button" title="Edit" data-act="edqedit" data-i="${i}">✎</button><button type="button" title="Remove" class="danger" data-act="edqdel" data-i="${i}">✕</button></div>`}</div>`).join("")||`<p class="muted small">No ${isQ?"statements":"questions"} yet.</p>`}</div>`;
+ const tool=(cmd,label,title,val)=>`<button type="button" data-act="edfmt" data-cmd="${cmd}" ${val?`data-val="${val}"`:""} title="${title}">${label}</button>`;
+ return `<div class="edtop"><div><div class="eyebrow">${ED.id?"EDIT":"NEW"} ${KIND[d.kind].toUpperCase()}</div><h1>${esc(d.title||"Untitled "+KIND[d.kind].toLowerCase())}</h1></div>
+  <div class="actions"><span class="chip ${d.status==="published"?"c-Completed":"c-Inprogress"}">${d.status==="published"?"Published":"Draft"}</span><button class="outline" data-act="edpreview">▶ Preview</button><button class="soft" data-act="edsave" data-s="draft">Save draft</button><button class="primary" data-act="edsave" data-s="published">Publish</button></div></div>
+ <div class="edwrap ${isF?"one":""}"><div class="stack">
+  <div class="card stack"><h3>Settings</h3><div class="form-grid"><label>Title<input data-ed="title" value="${esc(d.title)}" placeholder="e.g. Listening pre-test"></label>
+   <label>Used for${sel("purpose",purposesFor(d.kind).map(p=>[p,PURPOSE[p]]),d.purpose)}</label>
+   ${isQ||isF?"":`<label>Skill${sel("skill",[["","All skills / not set"],...SK.map(k=>[k,k])],d.skill)}</label><label>Segment (interventions)${sel("segment",[["","None"],...SEGMENTS.map(k=>[k,k])],d.segment)}</label>`}
+   <label>Order in the list<input data-ed="sort" type="number" value="${d.sort}"></label></div>
+   ${isF?"":`<label>${isQ?"Instructions shown to students":"Short introduction (optional)"}<textarea data-ed="intro" rows="2">${esc(d.intro)}</textarea></label>`}
+   ${isQ||isF?"":`<label>Media link (optional): YouTube video, audio file, image, or any https link to the podcast or graphic novel<input data-ed="media_url" type="url" value="${esc(d.media_url)}" placeholder="https://…"></label>`}
+   ${d.kind==="questionnaire"?'<p class="muted small">Students answer every statement on a five-point scale: 1 Strongly disagree, 2 Disagree, 3 Neutral, 4 Agree, 5 Strongly agree. The anxiety questionnaire is given before the pre-test, before each intervention and before the post-test.</p>':""}</div>
+  ${d.kind==="reading"?`<div class="card stack"><h3>Passage</h3><div class="rtbar">${tool("formatBlock","Heading","Heading","H3")}${tool("formatBlock","Text","Normal text","P")}${tool("bold","<b>B</b>","Bold")}${tool("italic","<i>I</i>","Italic")}${tool("underline","<u>U</u>","Underline")}${tool("insertUnorderedList","• List","Bulleted list")}${tool("insertOrderedList","1. List","Numbered list")}${tool("removeFormat","Clear","Remove formatting")}</div><div id="edPassage" class="passage-edit" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Passage text">${cleanHTML(d.passage)||"<p></p>"}</div><p class="muted small">Type or paste the passage. Select words to format them, or add and remove text freely.</p></div>`:""}
+  ${isF?`<div class="card stack"><h3>Cards (${d.cards.length})</h3><p class="muted small">One card per line: the word or term, then <code>|</code>, then its meaning.</p><textarea id="edCards" rows="14" placeholder="estuary | the place where a river meets the sea&#10;trawler | a boat that pulls a large net">${esc(d.cards.map(c=>`${c.front} | ${c.back}`).join("\n"))}</textarea></div>`:""}
+  ${qform}</div>${side}</div>`}
+async function previewPage(){const d=ED?.data;if(!d)return '<div class="card">Nothing to preview.</div>';
+ const bar=`<div class="notice previewbar"><b>Preview.</b> This is what students will see. Nothing is recorded. <button class="soft" data-act="edback">Back to editing</button></div>`;
+ if(d.kind==="flashcards")return bar+await cardsPage(null,d);
+ if(!d.questions.length)return bar+'<div class="card">Add at least one question to preview.</div>';
+ if(d.kind==="questionnaire"){RUN.st={preview:true,phase:"q",act:{...d}};return bar+RUN.likert()}
+ if(!RUN.st||!RUN.st.preview||RUN.st.act.kind==="questionnaire")RUN.st={phase:"q",preview:true,act:{...d},keys:ED.keys,learn:true,i:0,ans:{},fb:{}};
+ return bar+RUN.quiz()}
+async function resultsPage(id){
+ const [a,atts,st]=await Promise.all([ok(db.from("activities").select("*").eq("id",id).single()),fetchAll("activity_attempts","*",q=>q.eq("activity_id",id)),roster()]);
+ const nm={};st.forEach(s=>nm[s.id]=s);const done=atts.filter(t=>t.status==="done").sort((x,y)=>x.finished_at>y.finished_at?1:-1);const isQ=a.kind==="questionnaire";
+ return `<div class="head"><div class="eyebrow">RESULTS</div><h1>${esc(a.title)}</h1><p>${done.length} submissions from ${new Set(done.map(t=>t.student_id)).size} students${!isQ&&done.length?` · average ${fx(mean(done.map(t=>+t.pct)))}%`:""}</p></div>
+ <div class="card" style="overflow:auto"><table><thead><tr><th>Student</th>${isQ?"<th>Time point</th><th>Total</th><th>Mean (1–5)</th>":"<th>Attempt</th><th>Score</th><th>%</th><th>Confidence before</th><th>Confidence after</th>"}<th>Submitted</th></tr></thead><tbody>
+ ${done.map(t=>`<tr><td>${esc(nm[t.student_id]?.full_name||"Student")}</td>${isQ?`<td>${esc(ctxLabel(t.context))}</td><td>${t.score}/${t.total}</td><td>${fx(+t.detail?.mean,2)}</td>`:`<td>${t.attempt_no}</td><td>${t.score}/${t.total}</td><td>${fx(+t.pct)}</td><td>${t.conf_before??"-"}</td><td>${t.conf_after??"-"}</td>`}<td>${fmtDT(t.finished_at)}</td></tr>`).join("")||'<tr><td colspan="7" class="muted">No submissions yet.</td></tr>'}</tbody></table></div>`}
+const ctxLabel=c=>c==="pre"?"Before pre-test":c==="post"?"Before post-test":c?.startsWith("int:")?"Before an intervention":"-";
+async function perfPage(){
+ const [acts,atts,st]=await Promise.all([ok(db.from("activities").select("id,purpose,kind")),fetchAll("activity_attempts","student_id,activity_id,pct,status,attempt_no"),roster()]);
+ const P={};acts.forEach(a=>P[a.id]=a);
+ const rows=st.map(s=>{const m=p=>{const v=atts.filter(t=>t.student_id===s.id&&t.status==="done"&&t.attempt_no===1&&P[t.activity_id]?.purpose===p&&P[t.activity_id].kind!=="questionnaire").map(t=>+t.pct);return v.length?mean(v):null};
+  const pre=m("pretest"),iv=m("intervention"),po=m("posttest"),all=[pre,iv,po].filter(x=>x!=null);return {s,pre,iv,po,o:all.length?mean(all):null}}).sort((a,b)=>(a.o??-1)-(b.o??-1));
+ return `<div class="head"><div class="eyebrow">MY LIBRARY</div><h1>Students by performance</h1><p>Averages of first attempts. Students who need the most support are listed first.</p></div>
+ <div class="card" style="overflow:auto"><table><thead><tr><th>Student</th><th>Pre-test</th><th>Interventions</th><th>Post-test</th><th>Overall</th><th>Band</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.s.full_name)}</td><td>${pct1(r.pre)}</td><td>${pct1(r.iv)}</td><td>${pct1(r.po)}</td><td><b>${pct1(r.o)}</b></td><td>${r.o==null?'<span class="muted">No tests yet</span>':`<span class="chip c-${band(r.o).replace(/\s/g,"")}">${band(r.o)}</span>`}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No students yet.</td></tr>'}</tbody></table></div>`}
+
+Object.assign(ACT,{
+ libnew(el){newED(el.dataset.k);setR({view:"edit",id:null})},
+ async libedit(el){await loadED(el.dataset.id);setR({view:"edit",id:el.dataset.id})},
+ async libprev(el){await loadED(el.dataset.id);RUN.st=null;setR({view:"preview",id:el.dataset.id})},
+ libf(el){setR({f:el.dataset.f})},libres(el){setR({view:"results",id:el.dataset.id})},
+ async libpub(el){await rpc("set_activity_status",{p_id:el.dataset.id,p_status:el.dataset.s});toast(el.dataset.s==="published"?"Published. Students can now see it in its step.":"Moved back to drafts.");render()},
+ async libdup(el){await loadED(el.dataset.id);const d={...ED.data,title:ED.data.title+" (copy)",status:"draft"};await rpc("save_activity",{p_id:null,p_data:d,p_keys:ED.keys});ED=null;toast("Copy saved as a draft.");render()},
+ async libdel(el){if(!confirm("Delete this activity and every student result recorded for it? This cannot be undone."))return;await ok(db.from("activities").delete().eq("id",el.dataset.id));toast("Deleted.");render()},
+ edfmt(el,e){e.preventDefault();$("edPassage")?.focus();document.execCommand(el.dataset.cmd,false,el.dataset.val||null)},
+ edqedit(el){edSync();ED.qi=+el.dataset.i;ED.qf=qToForm(ED.data.questions[ED.qi],ED.keys[ED.qi]||{});render();document.querySelector("form[data-form=edq]")?.scrollIntoView({behavior:"smooth",block:"center"})},
+ edqcancel(){edSync();ED.qi=null;ED.qf=blankQ(ED.data.kind);render()},
+ edqdel(el){edSync();const i=+el.dataset.i;ED.data.questions.splice(i,1);ED.keys.splice(i,1);ED.qi=null;ED.dirty=true;render()},
+ edqmove(el){edSync();const i=+el.dataset.i,j=i+ +el.dataset.d;[ED.data.questions[i],ED.data.questions[j]]=[ED.data.questions[j],ED.data.questions[i]];[ED.keys[i],ED.keys[j]]=[ED.keys[j],ED.keys[i]];ED.qi=null;ED.dirty=true;render()},
+ edpreview(){edSync();RUN.st=null;setR({view:"preview",id:ED.id})},
+ edback(){RUN.st=null;setR({view:"edit",id:ED.id})},
+ async edsave(el){edSync();const d={...ED.data,status:el.dataset.s};
+  if(!d.title.trim())return toast("Give it a title first.");
+  if(el.dataset.s==="published"){if(d.kind==="flashcards"?!d.cards.length:!d.questions.length)return toast("Add content before publishing.");
+   const tg=TARGET[d.purpose];if(tg&&d.questions.length!==tg&&!confirm(`This ${PURPOSE[d.purpose].toLowerCase()} has ${d.questions.length} questions; the plan is ${tg}. Publish anyway?`))return}
+  const id=await rpc("save_activity",{p_id:ED.id,p_data:d,p_keys:ED.keys});ED.id=id;ED.data.status=d.status;ED.dirty=false;S.r.id=id;navKey=JSON.stringify(navSnap());history.replaceState({llc:navSnap(),d:navDepth},"");toast(d.status==="published"?"Published.":"Draft saved.");render()}});
+Object.assign(FORM,{
+ edq(f,fd){edSync();let b;try{b=buildQ(ED.qf)}catch(e){return toast(e.message)}
+  if(ED.qi!=null){ED.data.questions[ED.qi]=b.q;ED.keys[ED.qi]=b.k}else{ED.data.questions.push(b.q);ED.keys.push(b.k)}
+  ED.qi=null;ED.qf={type:ED.qf.type};ED.dirty=true;render();toast("Question saved in the list. Remember to save the activity.")},
+ edimport(f,fd){edSync();const {out,errs}=parseImport(fd.get("txt"),ED.data.kind);out.forEach(b=>{ED.data.questions.push(b.q);ED.keys.push(b.k)});ED.dirty=true;render();
+  toast(errs.length?`${out.length} imported, ${errs.length} skipped. ${errs[0]}`:`${out.length} imported. Remember to save.`)}});
+CHG.edre=()=>{edSync();ED.dirty=true;render()};
+CHG.qtype=el=>{edSync();ED.qf={type:el.value,explanation:ED.qf.explanation,skill:ED.qf.skill};render()};
+CHG.edfile=async el=>{const file=el.files[0];if(!file)return;if(file.size>2e6)return toast("That file is too large.");$("edImportTxt").value=await file.text();toast("File loaded. Press Import.")};
+
+/* ---------- research control ---------- */
+async function controlTab(){
+ const [stages,acts,atts,prog,st]=await Promise.all([ok(db.from("research_stages").select("*")),ok(db.from("activities").select("id,purpose,kind,status,title")),fetchAll("activity_attempts","student_id,activity_id,context,status"),fetchAll("research_progress"),roster()]);
+ const open={};stages.forEach(s=>open[s.stage]=s.is_open);const pub=p=>acts.filter(a=>a.status==="published"&&a.purpose===p);const PR={};prog.forEach(p=>PR[p.student_id]=p);
+ const doneSet=new Set(atts.filter(t=>t.status==="done").map(t=>t.student_id+"|"+t.activity_id+"|"+t.context));
+ const cnt=(sid,p)=>pub(p).filter(a=>doneSet.has(sid+"|"+a.id+"|")).length;const anx=pub("anxiety")[0];
+ const cell=(sid,p)=>{const t=pub(p).length;if(!t)return '<span class="muted">-</span>';const c=cnt(sid,p);return c===t?`<span class="chip c-Completed">${c}/${t}</span>`:c?`<span class="chip c-Inprogress">${c}/${t}</span>`:`<span class="muted">0/${t}</span>`};
+ const order=[["pre_questionnaire","Questionnaire","Anxiety and other questionnaires before the pre-test"],["pretest","Pre-test","One test per skill"],["intervention","Interventions","Flipped sessions; each starts with the anxiety questionnaire"],["posttest","Post-test","Single combined test; starts with the anxiety questionnaire"],["post_questionnaire","Final questionnaire","Opens for a student only after their post-test"]];
+ return `<div class="head"><div class="eyebrow">RESEARCH CONTROL</div><h1>Open and close each stage</h1><p>The researcher and professors decide when each stage is available. Students must also finish the earlier steps in order.</p></div>
+ <div class="card stack">${order.map(([k,n,d])=>`<div class="stage-row"><div><b>${n}</b><div class="muted small">${d} · ${pub(k==="pre_questionnaire"?"pre_questionnaire":k).length+(k==="pre_questionnaire"&&anx?1:0)} published</div></div><label class="switch"><input type="checkbox" data-chg="stage" data-k="${k}" ${open[k]?"checked":""}><span></span><em>${open[k]?"Open":"Closed"}</em></label></div>`).join("")}
+ ${anx?"":'<div class="notice">No anxiety questionnaire is published yet. Until one is published in My library, students are not asked about anxiety before the pre-test, interventions or post-test.</div>'}</div>
+ <div class="card" style="overflow:auto;margin-top:16px"><h3>Student progress</h3><table><thead><tr><th>Student</th><th>Read process</th><th>Consent</th><th>Anxiety (pre)</th><th>Pre-tests</th><th>Interventions</th><th>Post-test</th><th>Final questionnaire</th></tr></thead><tbody>
+ ${st.map(s=>`<tr><td>${esc(s.full_name)}</td><td>${PR[s.id]?.process_read_at?"✓":"-"}</td><td>${PR[s.id]?.consent_at?"✓":"-"}</td><td>${anx?(doneSet.has(s.id+"|"+anx.id+"|pre")?"✓":"-"):'<span class="muted">-</span>'}</td><td>${cell(s.id,"pretest")}</td><td>${cell(s.id,"intervention")}</td><td>${cell(s.id,"posttest")}</td><td>${cell(s.id,"post_questionnaire")}</td></tr>`).join("")||'<tr><td colspan="8" class="muted">No students yet.</td></tr>'}</tbody></table></div>`}
+CHG.stage=async el=>{await ok(db.from("research_stages").update({is_open:el.checked,updated_by:user.id,updated_at:new Date().toISOString()}).eq("stage",el.dataset.k));toast(el.checked?"Stage opened for students.":"Stage closed.");render()};
+
+/* ---------- attendance ---------- */
+async function attendTab(){
+ if(role()==="student"){const [ss,at]=await Promise.all([ok(db.from("class_sessions").select("*").order("started_at",{ascending:false})),ok(db.from("attendance").select("*").eq("student_id",user.id))]);
+  const m={};at.forEach(a=>m[a.session_id]=a);const pres=ss.filter(s=>m[s.id]&&m[s.id].status!=="absent").length;
+  return `<div class="head"><div class="eyebrow">ATTENDANCE</div><h1>My attendance</h1><p>Your attendance is recorded when you press Join class during a live class, or when your teacher marks it.</p></div>
+  <div class="statrow"><div class="card stat"><b>${ss.length?Math.round(100*pres/ss.length):0}%</b><span>Attendance</span></div><div class="card stat"><b>${pres}</b><span>Classes attended</span></div><div class="card stat"><b>${ss.length}</b><span>Classes held</span></div></div>
+  <div class="card" style="overflow:auto"><table><thead><tr><th>Class</th><th>Date</th><th>Status</th></tr></thead><tbody>${ss.map(s=>{const a=m[s.id]?.status||"absent";return `<tr><td>${esc(s.title)}</td><td>${fmtDT(s.started_at)}</td><td><span class="chip ${a==="absent"?"c-Locked":a==="late"?"c-Inprogress":"c-Completed"}">${a[0].toUpperCase()+a.slice(1)}</span></td></tr>`}).join("")||'<tr><td colspan="3" class="muted">No classes yet.</td></tr>'}</tbody></table></div>`}
+ const r=R();const [ss,at,st]=await Promise.all([ok(db.from("class_sessions").select("*").order("started_at",{ascending:false})),fetchAll("attendance"),roster()]);
+ if(r.sess){const s=ss.find(x=>x.id===r.sess);if(!s)return '<div class="card">Class not found.</div>';const m={};at.filter(a=>a.session_id===s.id).forEach(a=>m[a.student_id]=a);
+  return `<div class="head"><div class="eyebrow">ATTENDANCE</div><h1>${esc(s.title)}</h1><p>${fmtDT(s.started_at)} · ${s.mode==="live"?"Live class (students are marked when they join)":"Marked by teacher"}</p></div>
+  <div class="actions" style="margin:0 0 12px"><button class="soft" data-act="attall" data-id="${s.id}">Mark everyone present</button><button class="outline danger" data-act="attdel" data-id="${s.id}">Delete this class</button></div>
+  <div class="card" style="overflow:auto"><table><thead><tr><th>Student</th><th>Student no.</th><th>Status</th><th>Joined</th></tr></thead><tbody>${st.map(x=>{const a=m[x.id];return `<tr><td>${esc(x.full_name)}</td><td>${esc(x.sp.student_no||"")}</td><td><select data-chg="attset" data-s="${s.id}" data-u="${x.id}">${["absent","present","late"].map(o=>`<option ${((a?.status)||"absent")===o?"selected":""}>${o}</option>`).join("")}</select></td><td class="muted small">${a?.joined_at&&a.status!=="absent"?fmtDT(a.joined_at):"-"}</td></tr>`}).join("")}</tbody></table></div>`}
+ const pc=sid=>ss.length?Math.round(100*at.filter(a=>a.student_id===sid&&a.status!=="absent").length/ss.length):null;
+ return `<div class="head"><div class="eyebrow">ATTENDANCE</div><h1>Class attendance</h1><p>A class is added automatically each time you press Go live. Students are marked present when they join. You can also add a class and mark it by hand.</p></div>
+ <form data-form="attnew" class="card stack"><b>Add a class to mark by hand</b><div class="form-grid"><label>Class title<input name="title" required placeholder="e.g. Classroom session, Week 3"></label><label>Date and time<input name="when" type="datetime-local" required></label></div><button class="soft">Add class</button></form>
+ <div class="card" style="overflow:auto;margin-top:16px"><div class="row"><h3>Classes (${ss.length})</h3><button class="soft" data-act="attcsv">Download CSV</button></div><table><thead><tr><th>Class</th><th>Date</th><th>Type</th><th>Present</th><th></th></tr></thead><tbody>${ss.map(s=>`<tr><td>${esc(s.title)}</td><td>${fmtDT(s.started_at)}</td><td>${s.mode==="live"?"Live":"Manual"}</td><td>${at.filter(a=>a.session_id===s.id&&a.status!=="absent").length} / ${st.length}</td><td><button class="soft" data-act="attopen" data-id="${s.id}">Open</button></td></tr>`).join("")||'<tr><td colspan="5" class="muted">No classes yet.</td></tr>'}</tbody></table></div>
+ <div class="card" style="overflow:auto;margin-top:16px"><h3>Attendance by student</h3><table><thead><tr><th>Student</th><th>Student no.</th><th>Attended</th><th>%</th></tr></thead><tbody>${st.map(x=>`<tr><td>${esc(x.full_name)}</td><td>${esc(x.sp.student_no||"")}</td><td>${at.filter(a=>a.student_id===x.id&&a.status!=="absent").length} / ${ss.length}</td><td>${pc(x.id)==null?"-":pc(x.id)+"%"}</td></tr>`).join("")||'<tr><td colspan="4" class="muted">No students yet.</td></tr>'}</tbody></table></div>`}
+Object.assign(FORM,{async attnew(f,d){const r=await ok(db.from("class_sessions").insert({title:String(d.get("title")).trim(),mode:"manual",started_at:new Date(d.get("when")).toISOString(),created_by:user.id}).select("id").single());toast("Class added. Mark the students.");setR({sess:r.id})}});
+Object.assign(ACT,{attopen(el){setR({sess:el.dataset.id})},
+ async attdel(el){if(!confirm("Delete this class and its attendance record?"))return;await ok(db.from("class_sessions").delete().eq("id",el.dataset.id));toast("Class deleted.");setR({})},
+ async attall(el){const id=el.dataset.id,[st,ex]=await Promise.all([roster(),ok(db.from("attendance").select("student_id").eq("session_id",id))]);const have=new Set(ex.map(x=>x.student_id));
+  if(ex.length)await ok(db.from("attendance").update({status:"present",marked_by:user.id}).eq("session_id",id));
+  const add=st.filter(x=>!have.has(x.id)).map(x=>({session_id:id,student_id:x.id,status:"present",marked_by:user.id}));if(add.length)await ok(db.from("attendance").insert(add));toast("Everyone marked present.");render()},
+ async attcsv(){const [ss,at,st]=await Promise.all([ok(db.from("class_sessions").select("*").order("started_at")),fetchAll("attendance"),roster()]);const m={};at.forEach(a=>m[a.session_id+"|"+a.student_id]=a.status);
+  download("attendance.csv",[csvLine(["Name","Student no","Research ID",...ss.map(s=>`${s.title} (${new Date(s.started_at).toLocaleDateString()})`),"Attended","Percent"]),...st.map(x=>{const v=ss.map(s=>m[s.id+"|"+x.id]||"absent"),p=v.filter(y=>y!=="absent").length;return csvLine([x.full_name,x.sp.student_no,x.sp.research_id,...v,p,ss.length?Math.round(100*p/ss.length):""])})].join("\n"))}});
+CHG.attset=async el=>{const s=el.dataset.s,u=el.dataset.u,v=el.value;const up=await ok(db.from("attendance").update({status:v,marked_by:user.id}).eq("session_id",s).eq("student_id",u).select("student_id"));if(!up.length)await ok(db.from("attendance").insert({session_id:s,student_id:u,status:v,marked_by:user.id}));toast("Saved.")};
+/* live class: going live starts a class in the register; joining marks the student present */
+ACT.golive=async el=>{const on=el.dataset.on==="1";await rpc("set_live",{p_on:on});toast(on?"Class is live. Students can join now and attendance is being recorded.":"Class ended.");render()};
+ACT.joinlive=async()=>{const w=window.open("about:blank","_blank");try{const u=await rpc("join_live");if(w){w.opener=null;w.location.href=u}else location.href=u;toast("Attendance recorded. Enjoy the class.")}catch(e){w&&w.close()}};
+document.addEventListener("input",e=>{if(ED&&e.target.closest("[data-ed],#edPassage,#edCards"))ED.dirty=true});
+addEventListener("beforeunload",e=>{if(ED&&ED.dirty&&S.r?.view==="edit"){e.preventDefault();e.returnValue=""}});
+
+/* =====================================================================
+   v6 MODULE: discussion forum, live quiz game
+   ===================================================================== */
+const FK={public:["Class discussion","Everyone in the class can read and reply."],staff:["Ask a teacher","Private between one student and the researcher or professors."],dm:["Friends","Private chat between two classmates. Teachers can read it for safety."]};
+async function forumTab(){
+ const r=R(),staff=isStaff();
+ if(r.thread)return threadPage(r.thread);
+ const k=r.k||"public";const [ths,mates]=await Promise.all([ok(db.from("forum_threads").select("*").order("last_at",{ascending:false})),staff?roster():rpc("classmates")]);
+ const list=ths.filter(t=>t.kind===k);
+ const other=t=>t.kind==="public"?`Started by ${esc(t.creator_name||"")}`:staff?`${esc(t.creator_name||"")}${t.peer_name?" ↔ "+esc(t.peer_name):""}`:t.kind==="dm"?`With ${esc(t.created_by===user.id?t.peer_name:t.creator_name)}`:"With your teachers";
+ const canNew=!(staff&&k==="dm");
+ return `<div class="head"><div class="eyebrow">DISCUSSION</div><h1>Discussion forum</h1><p>Ask questions, talk with the class, or message privately.</p></div>
+ <div class="seg">${Object.entries(FK).map(([x,v])=>`<button data-act="fk" data-k="${x}" class="${k===x?"on":""}">${staff&&x==="staff"?"Private with students":staff&&x==="dm"?"Student chats":v[0]} (${ths.filter(t=>t.kind===x).length})</button>`).join("")}</div>
+ <p class="muted small" style="margin:10px 2px">${staff&&k==="dm"?"Private chats between students. You can read them and remove messages if needed.":FK[k][1]}</p>
+ ${canNew?`<details class="card" ${list.length?"":"open"}><summary>${k==="public"?"Start a new topic":k==="staff"?(staff?"Message a student privately":"Ask a teacher privately"):"Message a classmate"}</summary><form data-form="fnew" data-k="${k}" class="stack" style="margin-top:12px">
+  ${k==="dm"||(k==="staff"&&staff)?`<label>${staff?"Student":"Classmate"}<select name="peer" required><option value="">Choose…</option>${mates.map(m=>`<option value="${m.id}">${esc(m.full_name)}</option>`).join("")}</select></label>`:""}
+  ${k==="dm"?"":`<label>Title<input name="title" required maxlength="200"></label>`}<label>Message<textarea name="body" rows="3" required maxlength="4000"></textarea></label><button class="primary">Send</button></form></details>`:""}
+ <div class="stack" style="margin-top:14px">${list.map(t=>`<button class="card thread-row" data-act="fopen" data-id="${t.id}"><div><b>${esc(t.kind==="dm"&&!staff?(t.created_by===user.id?t.peer_name:t.creator_name):t.title)}</b><div class="muted small">${other(t)}</div></div><span class="muted small">${fmtDT(t.last_at)}</span></button>`).join("")||'<div class="empty">No conversations here yet.</div>'}</div>`}
+async function threadPage(id){
+ const [t,ms]=await Promise.all([ok(db.from("forum_threads").select("*").eq("id",id).maybeSingle()),ok(db.from("forum_messages").select("*").eq("thread_id",id).order("created_at"))]);
+ if(!t)return '<div class="card">This conversation is no longer available.</div>';const staff=isStaff();
+ stopTimers();let last=ms.length;every(8000,async()=>{if(S.r?.thread!==id||document.activeElement?.name==="body"&&document.activeElement.value)return;const c=await db.from("forum_messages").select("id").eq("thread_id",id);if(c.data&&c.data.length!==last)render()});
+ S.after=()=>{const b=$("msgs");if(b)b.scrollTop=b.scrollHeight};
+ return `<div class="head"><div class="eyebrow">${FK[t.kind][0].toUpperCase()}</div><h1>${esc(t.kind==="dm"&&!staff?"Chat with "+(t.created_by===user.id?t.peer_name:t.creator_name):t.title)}</h1><p>${t.kind==="public"?"Everyone in the class can read this.":t.kind==="staff"?"Private: only this student and the teachers can read this.":"Private chat. Teachers can read it for safety."}</p></div>
+ ${staff?`<div class="actions" style="margin:0 0 12px"><button class="outline danger" data-act="fdelthread" data-id="${id}">Delete whole conversation</button></div>`:""}
+ <div class="card chat"><div id="msgs" class="msgs">${ms.map(m=>`<div class="msg ${m.author_id===user.id?"mine":""} ${m.author_role!=="student"?"staff":""}"><div class="who">${esc(m.author_name||"")}${m.author_role!=="student"?' <span class="chip c-Available">Teacher</span>':""} <span class="muted">${fmtDT(m.created_at)}</span></div><div class="bubble">${m.removed?'<i class="muted">Message removed</i>':esc(m.body).replace(/\n/g,"<br>")}</div>${!m.removed&&(staff||m.author_id===user.id)?`<button class="linklike" data-act="fremove" data-id="${m.id}">Remove</button>`:""}</div>`).join("")}</div>
+ <form data-form="fpost" data-id="${id}" class="chatbox"><textarea name="body" rows="2" required maxlength="4000" placeholder="Write a message…"></textarea><button class="primary">Send</button></form></div>`}
+Object.assign(FORM,{
+ async fnew(f,d){const k=f.dataset.k,peer=d.get("peer")||null,m=f.querySelector("[name=peer]");const title=k==="dm"?"Chat":d.get("title");
+  const id=await rpc("forum_new",{p_kind:k,p_title:title,p_peer:peer,p_body:d.get("body")});setR({thread:id})},
+ async fpost(f,d){await rpc("forum_post",{p_thread:f.dataset.id,p_body:d.get("body")});render()}});
+Object.assign(ACT,{fk(el){setR({k:el.dataset.k})},fopen(el){setR({thread:el.dataset.id,k:R().k})},
+ async fremove(el){if(!confirm("Remove this message?"))return;await rpc("forum_remove",{p_message:el.dataset.id});render()},
+ async fdelthread(el){if(!confirm("Delete this whole conversation for everyone? This cannot be undone."))return;await ok(db.from("forum_threads").delete().eq("id",el.dataset.id));stopTimers();toast("Conversation deleted.");setR({})}});
+
+/* ---------- live quiz game ---------- */
+let LG=null; /* {id, game, players, mine, picked} */
+const lgLeft=g=>Math.max(0,g.seconds-(Date.now()-new Date(g.q_started_at).getTime())/1000);
+async function lgPull(){if(!LG)return false;const [g,pl]=await Promise.all([db.from("live_games").select("*").eq("id",LG.id).maybeSingle(),db.from("live_players").select("*").eq("game_id",LG.id)]);if(!g.data)return false;
+ const ch=!LG.game||g.data.phase!==LG.game.phase||g.data.q_index!==LG.game.q_index||(pl.data||[]).length!==(LG.players||[]).length;
+ LG.game=g.data;LG.players=(pl.data||[]).sort((a,b)=>b.score-a.score);
+ if(ch&&role()==="student"&&g.data.phase!=="question"){const a=await db.from("live_answers").select("*").eq("game_id",LG.id).eq("student_id",user.id);LG.mine=a.data||[]}
+ if(ch&&g.data.phase==="question")LG.picked=null;
+ return ch}
+function lgLoop(){stopTimers();every(1500,async()=>{if(!LG)return stopTimers();try{if(await lgPull())render();else lgTick()}catch{}});every(250,lgTick)}
+function lgTick(){const g=LG?.game;if(!g||g.phase!=="question")return;const l=lgLeft(g),b=$("lgBar"),t=$("lgSec");if(b)b.style.width=(100*l/g.seconds)+"%";if(t)t.textContent=Math.ceil(l);
+ if(l<=0&&isStaff()&&!LG.auto){LG.auto=true;rpc("live_step",{p_game:LG.id,p_action:"reveal"}).then(()=>{LG.auto=false;lgPull().then(render)}).catch(()=>LG.auto=false)}}
+const podium=(pl,n=5)=>`<ol class="board">${pl.slice(0,n).map((p,i)=>`<li class="${p.student_id===user.id?"me":""}"><span>${["🥇","🥈","🥉"][i]||i+1}</span><b>${esc(p.name||"Student")}</b><em>${p.score}</em></li>`).join("")||'<li class="muted">No players yet</li>'}</ol>`;
+function lgQuestion(g,opts={}){const q=g.current;if(!q)return "";const labels=q.type==="tf"?["True","False"]:q.type==="ar"?AR_OPTS:q.options||[];const rv=g.phase==="reveal"?g.reveal:null;const tot=rv?Object.values(rv.counts||{}).reduce((a,b)=>a+b,0):0;
+ const stem=q.type==="ar"?`<div class="ar"><b>Assertion (A)</b> ${esc(q.assertion)}</div><div class="ar"><b>Reason (R)</b> ${esc(q.reason)}</div>`:esc(q.q||"");
+ if(q.type==="match")return `<div class="lg-q">${stem}</div><div class="card">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><b>${rv?esc(q.right[rv.answer[i]]):"?"}</b></div>`).join("")}<p class="muted small">Matching questions are discussed together in a live quiz.</p></div>`;
+ return `<div class="lg-q">${stem}</div><div class="tiles big t${labels.length}">${labels.map((o,i)=>{const c=rv?(rv.counts?.[String(i)]||0):0;const cls=rv?(rv.answer===i?" right":" dim"):(LG.picked===i?" picked":LG.picked!=null?" dim":"");
+  return `<button type="button" class="tile c${i%4}${cls}" ${opts.play&&!rv&&LG.picked==null?`data-act="lgpick" data-v="${i}"`:"disabled"}><span>${"ABCD"[i]}</span>${esc(o)}${rv?`<em class="cnt">${c}${tot?` · ${Math.round(100*c/tot)}%`:""}</em>`:""}</button>`}).join("")}</div>${rv?.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`}
+async function hostPage(){
+ if(!LG||LG.id!==R().id){LG={id:R().id};await lgPull()}
+ const g=LG.game;if(!g){LG=null;return '<div class="card">This live quiz has ended.</div>'}
+ S.after=lgLoop;const pl=LG.players;
+ if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ · ${esc(g.title||"")}</div><p>Students open <b>Live class</b> on the website and type this code</p><div class="lg-code">${g.code.split("").join("<i></i>")}</div>
+  <div class="lg-players"><b>${pl.length}</b> joined${pl.length?`<div class="namecloud">${pl.map(p=>`<span>${esc(p.name||"")}</span>`).join("")}</div>`:""}</div><div class="actions"><button class="primary big-btn" data-act="lgstep" data-a="next" ${pl.length?"":"disabled"}>Start quiz</button><button class="outline" data-act="lgstep" data-a="end">Cancel</button></div></div>`;
+ if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>Final results</h1>${podium(pl,10)}<div class="actions"><button class="primary" data-act="lgclose">Back to My library</button></div></div><div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`;
+ const answered=g.phase==="reveal"?null:"";
+ return `<div class="lg-stage"><div class="row"><span class="badge">Question ${g.q_index+1} of ${g.n}</span>${g.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(lgLeft(g))}</b>s</span>`:'<span class="badge">Answer</span>'}<span class="muted small">${pl.length} players</span></div>
+  ${g.phase==="question"?`<div class="bar lgbar"><i id="lgBar" style="width:${100*lgLeft(g)/g.seconds}%"></i></div>`:""}${lgQuestion(g)}
+  ${g.phase==="reveal"?`<h3>Leaderboard</h3>${podium(pl)}`:""}
+  <div class="actions">${g.phase==="question"?'<button class="primary" data-act="lgstep" data-a="reveal">Show answer</button>':`<button class="primary big-btn" data-act="lgstep" data-a="next">${g.q_index+1<g.n?"Next question →":"Finish and show results"}</button>`}<button class="outline danger" data-act="lgstep" data-a="end">End quiz</button></div></div>`}
+function playPage(){
+ const g=LG?.game;if(!g)return '<div class="card">This live quiz has ended. <button class="soft" data-act="lgleave">Back</button></div>';
+ S.after=lgLoop;const pl=LG.players,meRow=pl.find(p=>p.student_id===user.id),rank=pl.findIndex(p=>p.student_id===user.id)+1;
+ if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ</div><h1>You're in!</h1><p class="muted">${esc(g.title||"")}</p><div class="lg-wait"><span></span><span></span><span></span></div><p>Waiting for your teacher to start. ${pl.length} joined so far.</p></div>`;
+ if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>${rank===1?"You won! 🏆":rank?`You finished #${rank}`:"Finished"}</h1><p class="muted">${meRow?.score||0} points</p>${podium(pl)}<div class="actions"><button class="primary" data-act="lgleave">Done</button></div></div>${rank&&rank<=3?`<div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`:""}`;
+ const my=(LG.mine||[]).find(a=>a.q_index===g.q_index);
+ const status=g.phase==="reveal"?`<div class="fb ${my?.correct?"good":"bad"} lg-result"><b>${my?(my.correct?`✓ Correct! +${my.points} points`:"✗ Not this time"):"⏱ No answer"}</b><span>Your score: ${meRow?.score||0}${rank?` · position #${rank}`:""}</span></div>`:LG.picked!=null?'<div class="fb lg-result"><b>Answer locked in</b><span>Wait for the result…</span></div>':"";
+ return `<div class="lg-stage"><div class="row"><span class="badge">Question ${g.q_index+1} of ${g.n}</span>${g.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(lgLeft(g))}</b>s</span>`:""}<span class="muted small">${meRow?.score||0} pts</span></div>
+ ${g.phase==="question"?`<div class="bar lgbar"><i id="lgBar" style="width:${100*lgLeft(g)/g.seconds}%"></i></div>`:""}${lgQuestion(g,{play:true})}${status}</div>`}
+const joinQuizCard=()=>`<form data-form="lgjoin" class="card stack lg-join"><div class="eyebrow">LIVE QUIZ</div><h3>Join a live quiz</h3><p class="muted small">Type the six-digit code your teacher shows on the screen.</p><div class="row"><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="000000" class="codein"><button class="primary">Join</button></div></form>`;
+Object.assign(FORM,{async lgjoin(f,d){const id=await rpc("live_join",{p_code:d.get("code")});LG={id};await lgPull();setR({view:"play",id})}});
+Object.assign(ACT,{
+ async libhost(el){const g=await rpc("live_host",{p_activity:el.dataset.id,p_seconds:20});LG={id:g.id};await lgPull();setR({view:"host",id:g.id})},
+ async lgstep(el){if(el.dataset.a==="end"&&!confirm("End this live quiz now?"))return;await rpc("live_step",{p_game:LG.id,p_action:el.dataset.a});await lgPull();if(el.dataset.a==="end"&&LG.game?.q_index<0){stopTimers();LG=null;return setR({})}render()},
+ lgclose(){stopTimers();LG=null;setR({})},lgleave(){stopTimers();LG=null;setR({})},
+ async lgpick(el){if(LG.picked!=null)return;LG.picked=+el.dataset.v;render();try{await rpc("live_answer",{p_game:LG.id,p_answer:LG.picked});try{playFeedbackSound(true)}catch{}}catch(e){}}});
+
+/* =====================================================================
+   v6 MODULE: statistics, SPSS export, Google Sheet sync, tab wiring
+   ===================================================================== */
+const ST={
+ lg(x){const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,.001208650973866179,-.000005395239384953];let y=x,t=x+5.5;t-=(x+.5)*Math.log(t);let s=1.000000000190015;for(let j=0;j<6;j++)s+=c[j]/++y;return -t+Math.log(2.5066282746310005*s/x)},
+ bcf(a,b,x){const E=3e-12,F=1e-300;let qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap;if(Math.abs(d)<F)d=F;d=1/d;let h=d;
+  for(let m=1;m<=300;m++){const m2=2*m;let aa=m*(b-m)*x/((qam+m2)*(a+m2));d=1+aa*d;if(Math.abs(d)<F)d=F;c=1+aa/c;if(Math.abs(c)<F)c=F;d=1/d;h*=d*c;aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));d=1+aa*d;if(Math.abs(d)<F)d=F;c=1+aa/c;if(Math.abs(c)<F)c=F;d=1/d;const del=d*c;h*=del;if(Math.abs(del-1)<E)break}return h},
+ ib(a,b,x){if(x<=0)return 0;if(x>=1)return 1;const bt=Math.exp(ST.lg(a+b)-ST.lg(a)-ST.lg(b)+a*Math.log(x)+b*Math.log(1-x));return x<(a+1)/(a+b+2)?bt*ST.bcf(a,b,x)/a:1-bt*ST.bcf(b,a,1-x)/b},
+ pT(t,df){return ST.ib(df/2,.5,df/(df+t*t))},
+ pF(F,d1,d2){return F<=0?1:ST.ib(d2/2,d1/2,d2/(d2+d1*F))},
+ tCrit(df){let lo=0,hi=200;for(let i=0;i<80;i++){const m=(lo+hi)/2;ST.pT(m,df)>.05?lo=m:hi=m}return (lo+hi)/2},
+ paired(pairs){const n=pairs.length;if(n<3)return null;const d=pairs.map(p=>p[1]-p[0]),md=mean(d),s=sd(d),m1=mean(pairs.map(p=>p[0])),m2=mean(pairs.map(p=>p[1]));
+  if(!s)return {n,m1,m2,md,sd:0,t:null,df:n-1,p:null,lo:md,hi:md,dz:null,sd1:sd(pairs.map(p=>p[0])),sd2:sd(pairs.map(p=>p[1]))};
+  const se=s/Math.sqrt(n),t=md/se,df=n-1,tc=ST.tCrit(df);return {n,m1,m2,sd1:sd(pairs.map(p=>p[0])),sd2:sd(pairs.map(p=>p[1])),md,sd:s,t,df,p:ST.pT(t,df),lo:md-tc*se,hi:md+tc*se,dz:md/s}},
+ wilcoxon(pairs){const d=pairs.map(p=>p[1]-p[0]).filter(x=>x!==0),n=d.length;if(n<5)return null;const o=d.map((x,i)=>({a:Math.abs(x),s:Math.sign(x)})).sort((x,y)=>x.a-y.a);let tie=0;
+  for(let i=0;i<n;){let j=i;while(j<n-1&&o[j+1].a===o[i].a)j++;const r=(i+j)/2+1,t=j-i+1;for(let k=i;k<=j;k++)o[k].r=r;if(t>1)tie+=t*t*t-t;i=j+1}
+  const wp=o.filter(x=>x.s>0).reduce((a,x)=>a+x.r,0),wm=n*(n+1)/2-wp,mu=n*(n+1)/4,sg=Math.sqrt(n*(n+1)*(2*n+1)/24-tie/48),z=(wp-mu)/sg;return {n,wp,wm,z,p:2*(1-Phi(Math.abs(z)))}},
+ rm(M){const n=M.length,k=M[0]?.length||0;if(n<3||k<2)return null;const g=mean(M.flat()),cm=Array.from({length:k},(_,j)=>mean(M.map(r=>r[j]))),rmn=M.map(r=>mean(r));
+  const sst=n*cm.reduce((a,m)=>a+(m-g)**2,0),sss=k*rmn.reduce((a,m)=>a+(m-g)**2,0),tot=M.flat().reduce((a,x)=>a+(x-g)**2,0),sse=tot-sst-sss,d1=k-1,d2=(k-1)*(n-1);
+  if(sse<=1e-12)return {n,k,F:null,d1,d2,p:null,eta:null,cm};const F=(sst/d1)/(sse/d2);return {n,k,F,d1,d2,p:ST.pF(F,d1,d2),eta:sst/(sst+sse),cm}},
+ alpha(M){const n=M.length,k=M[0]?.length||0;if(n<3||k<2)return null;const v=a=>{const s=sd(a);return s*s},iv=Array.from({length:k},(_,j)=>v(M.map(r=>r[j]))).reduce((a,b)=>a+b,0),tv=v(M.map(r=>r.reduce((a,b)=>a+b,0)));return tv?k/(k-1)*(1-iv/tv):null},
+ pearson(x,y){const n=x.length;if(n<4)return null;const mx=mean(x),my=mean(y);let sxy=0,sxx=0,syy=0;for(let i=0;i<n;i++){sxy+=(x[i]-mx)*(y[i]-my);sxx+=(x[i]-mx)**2;syy+=(y[i]-my)**2}if(!sxx||!syy)return null;const r=sxy/Math.sqrt(sxx*syy);return {n,r,p:Math.abs(r)>=1?0:ST.pT(r*Math.sqrt((n-2)/(1-r*r)),n-2)}}};
+async function statsData(){
+ const [acts,atts,st,ss,at,vq]=await Promise.all([ok(db.from("activities").select("*").order("sort").order("created_at")),fetchAll("activity_attempts","*",q=>q.eq("status","done")),roster(),ok(db.from("class_sessions").select("id")),fetchAll("attendance"),fetchAll("video_quiz_attempts","student_id,video_id,score,total,created_at")]);
+ const A={};acts.forEach(a=>A[a.id]=a);const anx=acts.find(a=>a.purpose==="anxiety"&&a.status==="published")||acts.find(a=>a.purpose==="anxiety");
+ const ivs=acts.filter(a=>a.purpose==="intervention"&&a.status==="published"),tps=["pre",...ivs.map(a=>"int:"+a.id),"post"],tpl=["Pre",...ivs.map((_,i)=>"I"+(i+1)),"Post"];
+ const first=atts.filter(t=>t.attempt_no===1);
+ const rows=st.map((s,idx)=>{const mine=first.filter(t=>t.student_id===s.id),of=p=>mine.filter(t=>A[t.activity_id]?.purpose===p&&A[t.activity_id].kind!=="questionnaire");
+  const r={id:s.sp.research_id||"P"+String(idx+1).padStart(3,"0"),anx:{},items:null,pre:{},post:{}};
+  if(anx)mine.filter(t=>t.activity_id===anx.id).forEach(t=>{r.anx[t.context]=+t.detail?.mean;if(t.context==="pre"&&Array.isArray(t.answers))r.items=t.answers.map((v,i)=>anx.questions[i]?.reverse?6-v:v)});
+  SK.forEach(k=>{const v=of("pretest").filter(t=>A[t.activity_id].skill===k).map(t=>+t.pct);if(v.length)r.pre[k]=mean(v)});
+  const pv=of("pretest").map(t=>+t.pct);r.preTotal=pv.length?mean(pv):null;const po=of("posttest");r.postTotal=po.length?mean(po.map(t=>+t.pct)):null;
+  SK.forEach(k=>{let c=0,n=0;po.forEach(t=>{const b=t.detail?.by_skill?.[k];if(b){c+=b.c;n+=b.n}});if(n)r.post[k]=100*c/n});
+  const cf=(l,f)=>{const v=l.map(t=>t[f]).filter(x=>x!=null);return v.length?mean(v):null};
+  r.cPreB=cf(of("pretest"),"conf_before");r.cPreA=cf(of("pretest"),"conf_after");r.cIvB=cf(of("intervention"),"conf_before");r.cIvA=cf(of("intervention"),"conf_after");r.cPostB=cf(po,"conf_before");r.cPostA=cf(po,"conf_after");
+  r.att=ss.length?100*at.filter(a=>a.student_id===s.id&&a.status!=="absent").length/ss.length:null;
+  const best={};vq.filter(v=>v.student_id===s.id).forEach(v=>best[v.video_id]=Math.max(best[v.video_id]||0,100*v.score/v.total));const bv=Object.values(best);r.vq=bv.length?mean(bv):null;
+  return r});
+ return {rows,tps,tpl,anx,nItems:anx?.questions.length||0}}
+function tRow(label,r,unit=""){if(!r)return `<tr><td>${label}</td><td colspan="8" class="muted">Not enough paired data yet (at least 3 students are needed).</td></tr>`;
+ return `<tr><td>${label}</td><td>${r.n}</td><td>${fx(r.m1,2)} (${fx(r.sd1,2)})</td><td>${fx(r.m2,2)} (${fx(r.sd2,2)})</td><td>${fx(r.md,2)}${unit}</td><td>${r.t==null?"-":fx(r.t,3)}</td><td>${r.df}</td><td>${fp(r.p)}</td><td>${fx(r.lo,2)} to ${fx(r.hi,2)}</td><td>${r.dz==null?"-":fx(r.dz,2)}</td></tr>`}
+const tHead=`<thead><tr><th>Comparison</th><th>N</th><th>First M (SD)</th><th>Second M (SD)</th><th>Mean change</th><th>t</th><th>df</th><th>p</th><th>95% CI of change</th><th>Cohen's d<sub>z</sub></th></tr></thead>`;
+async function statsTab(){
+ const D=await statsData(),R_=D.rows,pairs=(f,g)=>R_.filter(r=>f(r)!=null&&g(r)!=null&&!isNaN(f(r))&&!isNaN(g(r))).map(r=>[f(r),g(r)]);
+ const desc=D.tps.map((tp,i)=>{const v=R_.map(r=>r.anx[tp]).filter(x=>x!=null&&!isNaN(x));return {l:D.tpl[i],n:v.length,m:mean(v),s:sd(v),lo:v.length?Math.min(...v):null,hi:v.length?Math.max(...v):null}});
+ const ap=pairs(r=>r.anx.pre,r=>r.anx.post),tA=ST.paired(ap),wA=ST.wilcoxon(ap);
+ const comp=R_.filter(r=>D.tps.every(tp=>r.anx[tp]!=null&&!isNaN(r.anx[tp]))).map(r=>D.tps.map(tp=>r.anx[tp])),an=ST.rm(comp);
+ const items=R_.filter(r=>r.items&&r.items.length===D.nItems).map(r=>r.items),al=ST.alpha(items);
+ const sp_=pairs(r=>r.preTotal,r=>r.postTotal),cr=R_.filter(r=>r.anx.pre!=null&&r.anx.post!=null&&r.preTotal!=null&&r.postTotal!=null),pc=ST.pearson(cr.map(r=>r.anx.post-r.anx.pre),cr.map(r=>r.postTotal-r.preTotal));
+ const wS=ST.wilcoxon(sp_);
+ return `<div class="head"><div class="eyebrow">STATISTICS</div><h1>Anxiety and achievement statistics</h1><p>Calculated from students' first attempts. The same tests can be run in SPSS with the two downloads below.</p></div>
+ <div class="card stack"><div class="row"><h3>SPSS files</h3><div class="actions"><button class="primary" data-act="spsscsv">Download SPSS data (.csv)</button><button class="soft" data-act="spsssps">Download SPSS syntax (.sps)</button></div></div><p class="muted small">Open the syntax file in SPSS, correct the file path on the first line, and run it. It imports the data, labels the variables and runs the reliability, paired t-test, Wilcoxon, repeated-measures ANOVA and correlation analyses. Students appear by research ID only.</p></div>
+ <div class="card" style="margin-top:16px;overflow:auto"><h3>1. Anxiety at each time point</h3><p class="muted small">Mean item score from 1 (low anxiety) to 5 (high anxiety), after reverse-scoring positively worded statements.${D.anx?"":" No anxiety questionnaire has been created yet."}</p>
+  ${lineChart(desc.map(d=>d.l),[{name:"Mean anxiety",color:"#6558d3",vals:desc.map(d=>d.m)}],{max:5})}
+  <table><thead><tr><th>Time point</th><th>N</th><th>Mean</th><th>SD</th><th>Min</th><th>Max</th></tr></thead><tbody>${desc.map(d=>`<tr><td>${d.l}</td><td>${d.n}</td><td>${fx(d.m,2)}</td><td>${fx(d.s,2)}</td><td>${fx(d.lo,2)}</td><td>${fx(d.hi,2)}</td></tr>`).join("")}</tbody></table>
+  <p><b>Reliability (Cronbach's α, pre-test questionnaire):</b> ${al==null?'<span class="muted">not enough data yet</span>':`α = ${fx(al,3)} (${D.nItems} items, N = ${items.length})`}</p></div>
+ <div class="card" style="margin-top:16px;overflow:auto"><h3>2. Anxiety before and after (pre vs post)</h3><table>${tHead}<tbody>${tRow("Anxiety: pre → post",tA)}</tbody></table>
+  <p><b>Wilcoxon signed-rank test:</b> ${wA?`Z = ${fx(wA.z,3)}, p = ${fp(wA.p)} (N = ${wA.n} non-zero differences, sum of positive ranks = ${fx(wA.wp,1)}, negative = ${fx(wA.wm,1)})`:'<span class="muted">at least 5 changed scores are needed</span>'}</p>
+  <p><b>Repeated-measures ANOVA across all ${D.tps.length} time points:</b> ${an?(an.F==null?"no variation in the data":`F(${an.d1}, ${an.d2}) = ${fx(an.F,3)}, p = ${fp(an.p)}, partial η² = ${fx(an.eta,3)} (N = ${an.n} students with every time point; sphericity assumed)`):'<span class="muted">needs at least 3 students who completed every time point</span>'}</p></div>
+ <div class="card" style="margin-top:16px;overflow:auto"><h3>3. Achievement: pre-test vs post-test (%)</h3><table>${tHead}<tbody>${tRow("All skills",ST.paired(sp_))}${SK.map(k=>tRow(k,ST.paired(pairs(r=>r.pre[k],r=>r.post[k])))).join("")}</tbody></table>
+  <p><b>Wilcoxon signed-rank test (all skills):</b> ${wS?`Z = ${fx(wS.z,3)}, p = ${fp(wS.p)}`:'<span class="muted">not enough data yet</span>'}</p><p class="muted small">Per-skill post-test scores use the skill set on each post-test question.</p></div>
+ <div class="card" style="margin-top:16px;overflow:auto"><h3>4. Confidence meter: before vs after each test (1–10)</h3><table>${tHead}<tbody>${tRow("Pre-test",ST.paired(pairs(r=>r.cPreB,r=>r.cPreA)))}${tRow("Interventions",ST.paired(pairs(r=>r.cIvB,r=>r.cIvA)))}${tRow("Post-test",ST.paired(pairs(r=>r.cPostB,r=>r.cPostA)))}${tRow("Before pre-test → before post-test",ST.paired(pairs(r=>r.cPreB,r=>r.cPostB)))}</tbody></table></div>
+ <div class="card" style="margin-top:16px"><h3>5. Does lower anxiety go with higher gains?</h3><p><b>Pearson correlation</b> between change in anxiety (post − pre) and gain in score (post − pre): ${pc?`r = ${fx(pc.r,3)}, p = ${fp(pc.p)}, N = ${pc.n}`:'<span class="muted">at least 4 students with all four scores are needed</span>'}</p></div>
+ <div class="notice" style="margin-top:16px">p-values are two-tailed. Statistical significance does not by itself show that the teaching caused the change; report these results together with your research design, and confirm the final figures in SPSS.</div>`}
+function spssCols(D){const iv=D.tps.slice(1,-1).map((_,i)=>"anx_i"+(i+1));const c=[["id","Research ID",r=>r.id],["anx_pre","Anxiety before pre-test (mean 1-5)",r=>r.anx.pre],...iv.map((n,i)=>[n,`Anxiety before intervention ${i+1} (mean 1-5)`,r=>r.anx[D.tps[i+1]]]),["anx_post","Anxiety before post-test (mean 1-5)",r=>r.anx.post],
+  ...Array.from({length:D.nItems},(_,i)=>["anxpre_q"+(i+1),`Anxiety pre item ${i+1} (reverse-scored where needed)`,r=>r.items?.[i]]),
+  ...SK.map(k=>["pre_"+k.toLowerCase(),`Pre-test ${k} (%)`,r=>r.pre[k]]),["pre_total","Pre-test mean of skills (%)",r=>r.preTotal],["post_total","Post-test (%)",r=>r.postTotal],...SK.map(k=>["post_"+k.toLowerCase(),`Post-test ${k} (%)`,r=>r.post[k]]),
+  ["conf_pre_before","Confidence before pre-test (1-10)",r=>r.cPreB],["conf_pre_after","Confidence after pre-test (1-10)",r=>r.cPreA],["conf_int_before","Confidence before interventions (1-10)",r=>r.cIvB],["conf_int_after","Confidence after interventions (1-10)",r=>r.cIvA],["conf_post_before","Confidence before post-test (1-10)",r=>r.cPostB],["conf_post_after","Confidence after post-test (1-10)",r=>r.cPostA],
+  ["attendance_pct","Attendance (%)",r=>r.att],["videoquiz_mean","Video quiz best scores, mean (%)",r=>r.vq]];return {c,iv}}
+Object.assign(ACT,{
+ async spsscsv(){const D=await statsData(),{c}=spssCols(D);const num=v=>v==null||(typeof v==="number"&&isNaN(v))?"":typeof v==="number"?String(Math.round(v*1000)/1000):v;
+  download("llc_spss_data.csv",[c.map(x=>x[0]).join(","),...D.rows.map(r=>c.map(x=>{const v=num(x[2](r));return /[",]/.test(v)?'"'+String(v).replaceAll('"','""')+'"':v}).join(","))].join("\r\n"));toast("Data file downloaded.")},
+ async spsssps(){const D=await statsData(),{c,iv}=spssCols(D);const anxAll=["anx_pre",...iv,"anx_post"];const sk=SK.map(k=>k.toLowerCase());
+  const L=[`* Live Language Coach - SPSS syntax. Change the path below to where you saved llc_spss_data.csv.`,`GET DATA /TYPE=TXT /FILE='C:\\Users\\YourName\\Downloads\\llc_spss_data.csv' /DELIMITERS="," /QUALIFIER='"' /ARRANGEMENT=DELIMITED /FIRSTCASE=2`,`  /VARIABLES=`,...c.map(x=>`    ${x[0]} ${x[0]==="id"?"A20":"F8.3"}`),`  .`,`EXECUTE.`,``,`VARIABLE LABELS`,...c.map((x,i)=>`  ${x[0]} '${x[1].replaceAll("'","''")}'${i===c.length-1?".":""}`),``,
+   `* 1. Descriptive statistics.`,`DESCRIPTIVES VARIABLES=${anxAll.join(" ")} pre_total post_total attendance_pct /STATISTICS=MEAN STDDEV MIN MAX.`,``,
+   ...(D.nItems>1?[`* 2. Reliability of the anxiety questionnaire (Cronbach's alpha).`,`RELIABILITY /VARIABLES=anxpre_q1 TO anxpre_q${D.nItems} /SCALE('Anxiety (pre)') ALL /MODEL=ALPHA /SUMMARY=TOTAL.`,``]:[]),
+   `* 3. Anxiety before and after: paired-samples t-test and Wilcoxon signed-rank test.`,`T-TEST PAIRS=anx_pre WITH anx_post (PAIRED) /CRITERIA=CI(.95) /MISSING=ANALYSIS.`,`NPAR TESTS /WILCOXON=anx_pre WITH anx_post (PAIRED).`,``,
+   ...(anxAll.length>2?[`* 4. Anxiety across all time points: repeated-measures ANOVA.`,`GLM ${anxAll.join(" ")}`,`  /WSFACTOR=time ${anxAll.length} Polynomial /METHOD=SSTYPE(3)`,`  /EMMEANS=TABLES(time) COMPARE ADJ(BONFERRONI) /PRINT=DESCRIPTIVE ETASQ /WSDESIGN=time.`,``]:[]),
+   `* 5. Achievement: pre-test vs post-test.`,`T-TEST PAIRS=pre_total ${sk.map(k=>"pre_"+k).join(" ")} WITH post_total ${sk.map(k=>"post_"+k).join(" ")} (PAIRED) /CRITERIA=CI(.95) /MISSING=ANALYSIS.`,`NPAR TESTS /WILCOXON=pre_total WITH post_total (PAIRED).`,``,
+   `* 6. Confidence meter before and after each test.`,`T-TEST PAIRS=conf_pre_before conf_int_before conf_post_before conf_pre_before WITH conf_pre_after conf_int_after conf_post_after conf_post_before (PAIRED) /CRITERIA=CI(.95) /MISSING=ANALYSIS.`,``,
+   `* 7. Change in anxiety and gain in achievement.`,`COMPUTE anx_change=anx_post-anx_pre.`,`COMPUTE score_gain=post_total-pre_total.`,`EXECUTE.`,`CORRELATIONS /VARIABLES=anx_change score_gain attendance_pct videoquiz_mean /PRINT=TWOTAIL NOSIG /MISSING=PAIRWISE.`,``];
+  download("llc_spss_syntax.sps",L.join("\r\n"));toast("Syntax file downloaded.")},
+ async sheetscript(){const sec=await rpc("get_sheet_secret");const code=`/** Live Language Coach -> Google Sheet sync.
+ *  1. Open a new Google Sheet, then Extensions > Apps Script. Delete what is there and paste this whole file.
+ *  2. Choose the function "setup" in the toolbar and press Run. Allow the permissions it asks for.
+ *  The sheet then refreshes every 5 minutes. Use the "Live Language Coach" menu > "Sync now" to refresh at once.
+ *  Keep this script private: it contains the key that lets it read your study records. */
+const LLC_URL='${CONFIG.url}';
+const LLC_KEY='${CONFIG.key}';
+const LLC_SECRET='${sec}';
+function setup(){ScriptApp.getProjectTriggers().forEach(function(t){ScriptApp.deleteTrigger(t)});ScriptApp.newTrigger('syncNow').timeBased().everyMinutes(5).create();syncNow();}
+function onOpen(){SpreadsheetApp.getUi().createMenu('Live Language Coach').addItem('Sync now','syncNow').addToUi();}
+function syncNow(){
+  var res=UrlFetchApp.fetch(LLC_URL+'/rest/v1/rpc/sheet_export',{method:'post',contentType:'application/json',headers:{apikey:LLC_KEY,Authorization:'Bearer '+LLC_KEY},payload:JSON.stringify({p_secret:LLC_SECRET}),muteHttpExceptions:true});
+  if(res.getResponseCode()!==200)throw new Error('Sync failed: '+res.getContentText());
+  var data=JSON.parse(res.getContentText()),ss=SpreadsheetApp.getActiveSpreadsheet();
+  Object.keys(data).forEach(function(name){
+    var rows=data[name]||[],sh=ss.getSheetByName(name)||ss.insertSheet(name);sh.clearContents();
+    if(!rows.length){sh.getRange(1,1).setValue('No records yet');return;}
+    var head=Object.keys(rows[0]),out=[head].concat(rows.map(function(r){return head.map(function(h){var v=r[h];return v===null||v===undefined?'':(typeof v==='object'?JSON.stringify(v):v);});}));
+    sh.getRange(1,1,out.length,head.length).setValues(out);sh.getRange(1,1,1,head.length).setFontWeight('bold');sh.setFrozenRows(1);
+  });
+  var first=ss.getSheetByName('Sheet1');if(first&&first.getLastRow()===0&&ss.getSheets().length>1)ss.deleteSheet(first);
+  ss.getSheets()[0].getRange(1,1).setNote('Last synced: '+new Date());
+}
+`;download("google_sheet_sync.gs",code);toast("Script downloaded. Follow the steps on this page.")}});
+function sheetCard(){return `<div class="card stack" style="margin-top:16px"><div class="eyebrow">GOOGLE SHEET</div><h3>Automatic records in Google Sheets</h3><p class="muted">Attendance, test scores with confidence ratings, questionnaires and video-lecture quizzes are copied to a Google Sheet every five minutes, each on its own tab.</p>
+ <ol class="steps"><li>Press <b>Download sync script</b>. The file already contains your project's private key.</li><li>Sign in to Google as the account that should own the sheet and create a new Google Sheet.</li><li>In the sheet choose <b>Extensions → Apps Script</b>, delete the sample code, paste the whole downloaded file and save.</li><li>Select the function <b>setup</b> and press <b>Run</b>. Approve the permissions once.</li></ol>
+ <div class="actions"><button class="primary" data-act="sheetscript">Download sync script</button></div><p class="muted small">The sheet contains students' names and scores. Share it only with people on the research team.</p></div>`}
+
+/* ---------- wire the new tabs in ---------- */
+TABS.student=[["dash","Research"],["videos","Video lectures"],["practice","Practice"],["materials","Materials"],["attend","Attendance"],["forum","Discussion"],["live","Live class"],["feedback","Feedback"],["profile","Profile"]];
+TABS.teacher=[["overview","Students"],["library","My library"],["control","Research control"],["attend","Attendance"],["forum","Discussion"],["videos","Video lectures"],["materials","Materials"],["live","Live class"]];
+TABS.researcher=[["research","Analysis"],["library","My library"],["control","Research control"],["attend","Attendance"],["forum","Discussion"],["stats","Statistics"],["videos","Video lectures"],["materials","Materials"],["live","Live class"],["overview","Students"],["cohort","Cohort"],["setup","Setup"],["data","Data"]];
+ROLE_NAME.teacher="Professor";
+const _live0=TAB.live,_setup0=TAB.setup;
+Object.assign(TAB,{dash:researchHome,practice:practiceTab,library:libraryTab,control:controlTab,attend:attendTab,forum:forumTab,stats:statsTab,
+ live:async()=>{if(role()==="student"){if(R().view==="play")return playPage();return (await liveCard())+joinQuizCard()+joinPage(true)}return _live0()},
+ setup:async()=>(await _setup0())+(role()==="researcher"?sheetCard():"")});
+const _nav0=ACT.nav;ACT.nav=async(el,e)=>{if((RUN.busy()||(ED&&ED.dirty&&S.r?.view==="edit"))&&!confirm(RUN.busy()?"Leave this test? Your answers so far are kept on this device.":"Leave without saving your changes?")){e.preventDefault();return}stopTimers();S.r=null;RUN.st=null;LG=null;return _nav0(el,e)};
+
 (async function init(){
  if(!db){$("app").innerHTML='<div class="notice">Could not load the Supabase library. Check your internet connection.</div>';return}
  try{await loadUser()}catch(e){console.error(e)}
