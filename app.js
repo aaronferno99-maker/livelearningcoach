@@ -34,7 +34,10 @@ const TABS={student:[["dash","My learning"],["videos","Video lectures"],["materi
  guide:[["research","Research"],["cohort","Cohort"],["data","Data"]]};
 const ROLE_NAME={student:"Student",teacher:"Teacher",researcher:"Researcher",guide:"Research guide"};
 
+const URLH=new URLSearchParams(location.hash.slice(1));let RECOVERY=URLH.get("type")==="recovery",BOOTED=false;
+const AUTH_ERR=URLH.get("error_description");
 const db=window.supabase?window.supabase.createClient(CONFIG.url,CONFIG.key):null;
+if(db)db.auth.onAuthStateChange(ev=>{if(ev==="PASSWORD_RECOVERY"){RECOVERY=true;if(BOOTED){S={page:"newpass"};render()}}});
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let selectedSkill="Listening",skillMarks={};let user=null,profile=null,sp=null,settings={phase:"pre",week:1,rubric:{}},S={page:"home",tab:"",test:null,skill:null},mine=null,synthetic=false,channel=null,sessionNow=null,rec={};
@@ -207,6 +210,8 @@ async function render(){
   else if(S.page==="portfolio")a.innerHTML=portfolioPage();
   else if(S.page.startsWith("staff-"))a.innerHTML=staffPage(S.page.slice(6));
   else if(S.page==="login")a.innerHTML=loginPage();
+  else if(S.page==="forgot")a.innerHTML=forgotPage();
+  else if(S.page==="newpass")a.innerHTML=newPassPage();
   else if(S.page==="register")a.innerHTML=registerPage();
   else if(S.page==="join")a.innerHTML=joinPage();
   else if(S.page==="app"){
@@ -298,18 +303,24 @@ function portfolioPage(){
 function staffPage(r){
  const P=PORTALS[r];if(!P)return landing();
  return `<div class="card auth-card view-enter stack" style="max-width:460px;margin:40px auto"><div class="auth-head"><div><div class="eyebrow">${P.label.toUpperCase()} PORTAL</div><h2 style="margin:4px 0">${P.label} login</h2></div><svg viewBox="0 0 56 56" width="46" height="46" fill="none"><circle class="orbit-slow" cx="28" cy="28" r="22" stroke="#14B8A6" stroke-width="1.5" stroke-dasharray="5 4"/><circle cx="28" cy="28" r="8" fill="rgba(92,89,232,0.18)"/></svg></div><p class="muted">${P.text}</p>
- <form data-form="staff" data-role="${r}" class="stack"><label>Email<input name="email" type="email" required autocomplete="username"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="primary">Log in as ${P.label.toLowerCase()}</button></form>
+ <form data-form="staff" data-role="${r}" class="stack"><label>Email<input name="email" type="email" required autocomplete="username"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="primary">Log in as ${P.label.toLowerCase()}</button></form><p class="small"><a href="#" data-act="nav" data-k="forgot">Forgot password?</a></p>
  <details><summary class="muted">First time here? Activate your invited account</summary><form data-form="staffnew" data-role="${r}" class="stack" style="margin-top:12px"><label>Full name<input name="full_name" required></label><label>Invited email address<input name="email" type="email" required></label><label>Create a password (min 8 characters)<input name="password" type="password" minlength="8" required autocomplete="new-password"></label><button class="soft">Activate account</button><p class="muted small">Only works for the email address the researcher invited for this role.</p></form></details>
  <p class="muted small">Student? <a href="#" data-act="nav" data-k="login">Use the student portal</a> · <a href="#" data-act="nav" data-k="home">Back to home</a></p></div>`;
 }
-const loginPage=()=>`<div class="card auth-card view-enter stack" style="max-width:440px;margin:40px auto"><div class="auth-head"><div><div class="eyebrow">STUDENT PORTAL</div><h2 style="margin:4px 0">Student login</h2></div><svg viewBox="0 0 56 56" width="46" height="46" fill="none"><circle class="orbit-slow" cx="28" cy="28" r="22" stroke="#5C59E8" stroke-width="1.5" stroke-dasharray="5 4"/><path class="wave-float" d="M16 30 Q22 22 28 30 T40 30" stroke="#14B8A6" stroke-width="2.2" stroke-linecap="round"/></svg></div><form data-form="login" class="stack"><label>Email<input name="email" type="email" required autocomplete="username"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="primary">Log in</button></form><p class="muted small">New student? <a href="#" data-act="nav" data-k="register">Register</a>. Professors, the researcher and the guide have their own portals: <a href="#" data-act="nav" data-k="staff-teacher">Professor</a> · <a href="#" data-act="nav" data-k="staff-researcher">Researcher</a>.</p></div>`;
+const loginPage=()=>`<div class="card auth-card view-enter stack" style="max-width:440px;margin:40px auto"><div class="auth-head"><div><div class="eyebrow">STUDENT PORTAL</div><h2 style="margin:4px 0">Student login</h2></div><svg viewBox="0 0 56 56" width="46" height="46" fill="none"><circle class="orbit-slow" cx="28" cy="28" r="22" stroke="#5C59E8" stroke-width="1.5" stroke-dasharray="5 4"/><path class="wave-float" d="M16 30 Q22 22 28 30 T40 30" stroke="#14B8A6" stroke-width="2.2" stroke-linecap="round"/></svg></div><form data-form="login" class="stack"><label>Email<input name="email" type="email" required autocomplete="username"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="primary">Log in</button></form><p class="small"><a href="#" data-act="nav" data-k="forgot">Forgot password?</a></p><p class="muted small">New student? <a href="#" data-act="nav" data-k="register">Register</a>. Professors, the researcher and the guide have their own portals: <a href="#" data-act="nav" data-k="staff-teacher">Professor</a> · <a href="#" data-act="nav" data-k="staff-researcher">Researcher</a>.</p></div>`;
+const forgotPage=()=>`<div class="card auth-card stack" style="max-width:460px;margin:40px auto"><div class="eyebrow">FORGOT PASSWORD</div><h2>Reset your password</h2><p class="muted">Students: your password was your last name and year of birth, for example <b>Aaron1999</b>, unless you changed it. Try that first.</p>
+ <form data-form="forgot" class="stack"><label>Your registered email<input name="email" type="email" required autocomplete="username"></label><button class="primary">Send reset link</button></form>
+ <p class="muted small">You can also ask your professor or the researcher to reset it for you.</p><p class="small"><a href="#" data-act="nav" data-k="login">Back to login</a></p></div>`;
+const newPassPage=()=>`<div class="card auth-card stack" style="max-width:460px;margin:40px auto"><div class="eyebrow">NEW PASSWORD</div><h2>Choose a new password</h2>${user?"":'<div class="notice">This reset link has expired or was already used. Please ask for a new one.</div>'}
+ <form data-form="newpass" class="stack"><label>New password (at least 6 characters)<input name="p1" type="password" minlength="6" required autocomplete="new-password"></label><label>Type it again<input name="p2" type="password" minlength="6" required autocomplete="new-password"></label><button class="primary" ${user?"":"disabled"}>Save new password</button></form></div>`;
 function registerPage(){
  const f=(n,l,t="text",x="")=>`<label>${l}<input name="${n}" type="${t}" ${x}></label>`;
  return `<div class="card stack" style="max-width:720px;margin:30px auto"><h2>Student registration</h2><form data-form="register" class="stack">
- <div class="form-grid">${f("full_name","Full name","text","required")}${f("student_no","Student ID number","text","required")}${f("mobile","Mobile number (10 digits)","tel",'required pattern="[6-9][0-9]{9}"')}${f("email","Email address","email","required")}${f("age","Age","number",'required min="16" max="40"')}${f("place","Place / district","text","required")}
+ <div class="form-grid">${f("full_name","Full name","text",'required data-pwsrc="1"')}${f("student_no","Student ID number","text","required")}${f("mobile","Mobile number (10 digits)","tel",'required pattern="[6-9][0-9]{9}"')}${f("email","Email address","email","required")}${f("birth_year","Year of birth","number",'required min="1980" max="2012" data-pwsrc="1" placeholder="e.g. 2005"')}${f("place","Place / district","text","required")}
  <label>Gender<select name="gender" required><option value="">Select</option><option>Female</option><option>Male</option><option>Other</option><option>Prefer not to say</option></select></label>
  <label>UG classification<select name="year" required><option value="">Select</option><option value="1">Year I</option><option value="2">Year II</option><option value="3">Year III</option></select></label>
- ${f("college","College / Department","text","required")}${f("password","Password (min 8 characters)","password",'required minlength="8" autocomplete="new-password"')}</div>
+ ${f("college","College / Department","text","required")}</div>
+ <div class="pwbox"><div><div class="eyebrow">YOUR PASSWORD</div><output id="pwOut" class="pwout">Type your full name and year of birth</output><p class="muted small">Your password is your <b>last name</b> followed by your <b>year of birth</b>, for example <b>Aaron1999</b>. Write it down. You can change it later under Profile.</p></div><input type="hidden" name="password" id="pwVal"></div>
  <label class="check"><input type="checkbox" name="consent_research" required> I have read the study information and give informed consent to take part in this research.</label>
  <label class="check"><input type="checkbox" name="consent_email" checked> Send my assessment feedback by email.</label>
  <label class="check"><input type="checkbox" name="consent_whatsapp"> Send short notifications by WhatsApp (needs your consent; you can change this later).</label>
@@ -327,14 +338,27 @@ const FORM={
   await loadUser();if(role()!==want){await db.auth.signOut();user=null;profile=null;sp=null;buildNav();return toast("This email has not been invited for this portal. Ask the researcher to invite it, then try again.")}
   go("app",homeTab());toast("Welcome!")},
  async register(f,d){
-  const meta={};["full_name","student_no","mobile","age","place","gender","year","college"].forEach(k=>meta[k]=String(d.get(k)||"").trim());
+  const meta={};["full_name","student_no","mobile","birth_year","place","gender","year","college"].forEach(k=>meta[k]=String(d.get(k)||"").trim());
+  const by=+meta.birth_year,pw=genPassword(meta.full_name,by);if(!(by>=1980&&by<=2012))return toast("Enter your year of birth, e.g. 2005.");if(!pw)return toast("Type your full name in English letters.");
+  meta.age=String(new Date().getFullYear()-by);d.set("password",pw);
   meta.consent_research=!!d.get("consent_research");meta.consent_email=!!d.get("consent_email");meta.consent_whatsapp=!!d.get("consent_whatsapp");
   if(!/^[6-9]\d{9}$/.test(meta.mobile))return toast("Enter a valid 10-digit mobile number.");
   const r=await db.auth.signUp({email:String(d.get("email")).trim(),password:d.get("password"),options:{data:meta}});
   if(r.error)return toast(r.error.message);
   if(!r.data.session){$("app").innerHTML='<div class="card" style="max-width:520px;margin:40px auto"><h2>Check your email</h2><p>We sent a confirmation link. After confirming, log in. The researcher will verify your details and give you a research ID.</p></div>';return}
-  await loadUser();go("app","dash");toast("Welcome!")},
+  await loadUser();go("app","dash");toast(`Welcome! Your password is ${pw}. Please remember it.`)},
+ async forgot(f,d){const email=String(d.get("email")).trim();const r=await db.auth.resetPasswordForEmail(email,{redirectTo:location.origin+"/"});
+  if(r.error)return toast(/rate|limit/i.test(r.error.message)?"Too many reset emails were sent just now. Please try again in an hour, or ask your professor to reset your password.":r.error.message);
+  $("app").innerHTML=`<div class="card auth-card stack" style="max-width:460px;margin:40px auto"><div class="eyebrow">CHECK YOUR EMAIL</div><h2>Reset link sent</h2><p>If an account exists for <b>${esc(email)}</b>, an email with a reset link is on its way. Open it on this device and choose a new password. Check your spam folder too.</p><p class="muted small">No email after 10 minutes? Ask your professor or the researcher to reset your password for you.</p><button class="soft" data-act="nav" data-k="login">Back to login</button></div>`},
+ async newpass(f,d){const a1=d.get("p1"),a2=d.get("p2");if(a1!==a2)return toast("The two passwords do not match.");const r=await db.auth.updateUser({password:a1});if(r.error)return toast(r.error.message);
+  RECOVERY=false;history.replaceState(history.state,"",location.pathname);await loadUser();toast("Your password has been changed.");user?go("app",homeTab()):go("login")},
+ async chpw(f,d){const a1=d.get("p1"),a2=d.get("p2");if(a1!==a2)return toast("The two passwords do not match.");const r=await db.auth.updateUser({password:a1});if(r.error)return toast(r.error.message);f.reset();toast("Password changed. Use the new one next time you log in.")},
 };
+function genPassword(name,by){
+ const w=String(name||"").replace(/[^A-Za-z\s]/g," ").split(/\s+/).filter(Boolean);if(!w.length||!by)return "";
+ let pick=[...w].reverse().find(x=>x.length>=3)||w.reduce((a,b)=>b.length>a.length?b:a);
+ return pick[0].toUpperCase()+pick.slice(1).toLowerCase()+by}
+document.addEventListener("input",e=>{if(!e.target.closest("[data-pwsrc]"))return;const f=e.target.form;const pw=genPassword(f.full_name.value,+f.birth_year.value>=1980&&+f.birth_year.value<=2012?f.birth_year.value:"");const o=$("pwOut");if(o){o.textContent=pw||"Type your full name and year of birth";o.classList.toggle("ready",!!pw)}$("pwVal").value=pw});
 
 /* ------------------------------------------------------------- student */
 async function loadMine(){
@@ -446,9 +470,11 @@ async function feedbackTab(){
  await loadMine();
  return `<div class="head"><div class="eyebrow">FEEDBACK</div><h1>Your feedback</h1></div>${mine.fb.map(x=>`<div class="card" style="margin-bottom:12px"><div class="row"><h3>${x.skill}</h3><span class="badge">${esc(x.band||"")}</span></div><p>${esc(x.body)}</p>${x.recommendation?`<p><b>Next step:</b> ${esc(x.recommendation)}</p>`:""}${x.teacher_remark?`<p><b>Teacher remark:</b> ${esc(x.teacher_remark)}</p>`:""}<small class="muted">${new Date(x.created_at).toLocaleDateString()}</small></div>`).join("")||'<div class="empty">No feedback yet. Complete a test to see it here.</div>'}`;
 }
-async function profileTab(){
- if(!sp)return '<div class="empty">No student profile.</div>';
- return `<div class="head"><h1>My profile</h1></div><div class="card stack"><div class="form-grid"><div><b>Name</b><br>${esc(profile.full_name)}</div><div><b>Email</b><br>${esc(profile.email)}</div><div><b>Mobile</b><br>${esc(profile.mobile)}</div><div><b>Year</b><br>${sp.year||"-"}</div><div><b>College</b><br>${esc(sp.college)}</div><div><b>Research ID</b><br>${esc(sp.research_id||"pending verification")}</div></div>
+const chpwCard=()=>`<form data-form="chpw" class="card stack" style="margin-top:16px"><h3>Change password</h3><div class="form-grid"><label>New password (at least 6 characters)<input name="p1" type="password" minlength="6" required autocomplete="new-password"></label><label>Type it again<input name="p2" type="password" minlength="6" required autocomplete="new-password"></label></div><button class="soft">Change password</button></form>`;
+async function profileTab(){return (await profileTab0())+chpwCard()}
+async function profileTab0(){
+ if(!sp)return `<div class="head"><h1>My account</h1></div><div class="card"><div class="form-grid"><div><b>Name</b><br>${esc(profile?.full_name||"")}</div><div><b>Email</b><br>${esc(profile?.email||user.email)}</div><div><b>Role</b><br>${ROLE_NAME[role()]||""}</div></div></div>`;
+ return `<div class="head"><h1>My profile</h1></div><div class="card stack"><div class="form-grid"><div><b>Name</b><br>${esc(profile.full_name)}</div><div><b>Email</b><br>${esc(profile.email)}</div><div><b>Mobile</b><br>${esc(profile.mobile)}</div><div><b>Year</b><br>${sp.year||"-"}</div><div><b>Year of birth</b><br>${sp.birth_year||"-"}</div><div><b>College</b><br>${esc(sp.college)}</div><div><b>Research ID</b><br>${esc(sp.research_id||"pending verification")}</div></div>
  <form data-form="prefs" class="stack"><label class="check"><input type="checkbox" name="consent_email" ${sp.consent_email?"checked":""}> Email notifications</label><label class="check"><input type="checkbox" name="consent_whatsapp" ${sp.consent_whatsapp?"checked":""}> WhatsApp notifications</label><button class="primary">Save preferences</button></form></div>`;
 }
 FORM.prefs=async(f,d)=>{await ok(db.from("student_profiles").update({consent_email:!!d.get("consent_email"),consent_whatsapp:!!d.get("consent_whatsapp")}).eq("user_id",user.id));await loadUser();toast("Saved.")};
@@ -465,7 +491,7 @@ async function overview(){
  const yr=[1,2,3].map(y=>{const r=rows.filter(x=>x.s.sp.year===y).flatMap(x=>x.v.filter(z=>z!=null));return mean(r)});
  return `<div class="head"><div class="eyebrow">LEARNING PERFORMANCE</div><h1>Students</h1><p>${rows.length} student(s) visible to you.</p></div>
  <div class="card"><b>Average latest score by UG year</b>${barChart(["Year I","Year II","Year III"],[{name:"Average %",vals:yr,color:"#6558d3"}],{max:100})}</div>
- <div class="card" style="margin-top:14px;overflow:auto"><table><thead><tr><th>Name</th><th>Year</th>${SK.map(k=>`<th>${k.slice(0,4)}</th>`).join("")}<th></th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.s.full_name)}</td><td>${r.s.sp.year||"-"}</td>${r.v.map(x=>`<td class="${x!=null&&x<50?"low":""}">${pct1(x)}</td>`).join("")}<td>${r.low?'<span class="badge warn">needs practice</span>':""}${r.pending?'<span class="badge">to assess</span>':""}</td></tr>`).join("")||'<tr><td colspan="9" class="muted">No students yet.</td></tr>'}</tbody></table></div>`;
+ <div class="card" style="margin-top:14px;overflow:auto"><table><thead><tr><th>Name</th><th>Year</th>${SK.map(k=>`<th>${k.slice(0,4)}</th>`).join("")}<th></th><th>Login</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.s.full_name)}</td><td>${r.s.sp.year||"-"}</td>${r.v.map(x=>`<td class="${x!=null&&x<50?"low":""}">${pct1(x)}</td>`).join("")}<td>${r.low?'<span class="badge warn">needs practice</span>':""}${r.pending?'<span class="badge">to assess</span>':""}</td><td><button class="soft small-btn" data-act="resetpw" data-id="${r.s.id}" data-pw="${esc(genPassword(r.s.full_name,r.s.sp.birth_year))}" data-name="${esc(r.s.full_name)}">Reset password</button></td></tr>`).join("")||'<tr><td colspan="9" class="muted">No students yet.</td></tr>'}</tbody></table></div>`;
 }
 async function unlockTab(){
  const [un,st]=await Promise.all([ok(db.from("skill_unlocks").select("*")),roster()]);
@@ -1460,10 +1486,61 @@ Object.assign(TAB,{dash:researchHome,practice:practiceTab,library:libraryTab,con
  setup:async()=>(await _setup0())+(role()==="researcher"?sheetCard():"")});
 const _nav0=ACT.nav;ACT.nav=async(el,e)=>{if((RUN.busy()||(ED&&ED.dirty&&S.r?.view==="edit"))&&!confirm(RUN.busy()?"Leave this test? Your answers so far are kept on this device.":"Leave without saving your changes?")){e.preventDefault();return}stopTimers();S.r=null;RUN.st=null;LG=null;return _nav0(el,e)};
 
+/* =====================================================================
+   v7 MODULE: notification bell, staff password reset
+   ===================================================================== */
+const NB={items:[],unread:0,open:false,ch:null,t:null,uid:null,seen:null};
+const NB_ICON={message:"✉",feedback:"✎",stage:"➜",activity:"✦",live:"●",video:"▶",material:"❏",student:"☺"};
+function ago(t){const s=(Date.now()-new Date(t).getTime())/1000;if(s<60)return "just now";if(s<3600)return Math.floor(s/60)+" min ago";if(s<86400)return Math.floor(s/3600)+" h ago";return new Date(t).toLocaleDateString()}
+function nbMount(){if($("bellBtn"))return;const acc=document.querySelector("header .account");if(!acc)return;
+ const w=document.createElement("div");w.className="bellwrap";w.innerHTML=`<button id="bellBtn" type="button" class="bell" aria-label="Notifications" aria-expanded="false" aria-haspopup="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span id="bellCount" class="bellcount" hidden></span></button><div id="bellPanel" class="bellpanel" hidden role="dialog" aria-label="Notifications"></div>`;
+ acc.insertBefore(w,acc.firstChild);
+ $("bellBtn").onclick=e=>{e.stopPropagation();NB.open?nbClose():nbOpen()};
+ document.addEventListener("click",e=>{if(NB.open&&!e.target.closest(".bellwrap"))nbClose()});
+ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&NB.open)nbClose()})}
+function nbPaint(){const c=$("bellCount"),b=$("bellBtn");if(!c)return;c.hidden=!NB.unread;c.textContent=NB.unread>99?"99+":NB.unread;b.classList.toggle("has",NB.unread>0);
+ b.setAttribute("aria-label",NB.unread?`Notifications, ${NB.unread} unread`:"Notifications");document.title=(NB.unread?`(${NB.unread}) `:"")+"Live Language Coach";
+ if(NB.open)nbRenderPanel()}
+function nbRenderPanel(){const p=$("bellPanel");if(!p)return;
+ const perm=("Notification" in window)?Notification.permission:"unsupported";
+ p.innerHTML=`<div class="bp-head"><b>Notifications</b>${NB.unread?'<button type="button" class="linklike" data-nb="readall">Mark all as read</button>':""}</div>
+ <div class="bp-list">${NB.items.map(n=>`<button type="button" class="bp-item ${n.read_at?"":"unread"}" data-nb="open" data-id="${n.id}"><span class="bp-ic k-${esc(n.kind)}">${NB_ICON[n.kind]||"•"}</span><span class="bp-txt"><b>${esc(n.title)}</b>${n.body?`<span>${esc(n.body)}</span>`:""}<em>${ago(n.created_at)}</em></span></button>`).join("")||'<div class="bp-empty">You have no notifications yet.</div>'}</div>
+ <div class="bp-foot">${perm==="default"?'<button type="button" class="soft" data-nb="perm">Also alert me on this device</button>':perm==="granted"?'<span class="muted small">Device alerts are on.</span>':""}${NB.items.some(n=>n.read_at)?'<button type="button" class="linklike" data-nb="clear">Clear read</button>':""}</div>`}
+function nbOpen(){NB.open=true;$("bellPanel").hidden=false;$("bellBtn").setAttribute("aria-expanded","true");nbRenderPanel();nbPull()}
+function nbClose(){NB.open=false;const p=$("bellPanel");if(p)p.hidden=true;$("bellBtn")?.setAttribute("aria-expanded","false")}
+async function nbPull(){if(!user)return;try{const r=await db.rpc("inbox_summary");if(r.error)return;const d=r.data||{items:[],unread:0};
+  const fresh=(d.items||[]).filter(n=>!n.read_at&&NB.seen&&!NB.seen.has(n.id));
+  NB.items=d.items||[];NB.unread=d.unread||0;
+  if(NB.seen&&fresh.length){$("bellBtn")?.classList.add("ring");setTimeout(()=>$("bellBtn")?.classList.remove("ring"),1200);
+   if(document.hidden&&("Notification" in window)&&Notification.permission==="granted")fresh.slice(0,3).forEach(n=>{try{new Notification(n.title,{body:n.body||"",tag:n.id})}catch{}});
+   else if(!NB.open)toast("🔔 "+fresh[0].title)}
+  NB.seen=new Set(NB.items.map(n=>n.id));nbPaint()}catch(e){}}
+function nbStart(){nbMount();if(NB.uid===user.id)return;nbStop();NB.uid=user.id;NB.seen=null;$("bellBtn").parentElement.hidden=false;nbPull();
+ NB.t=setInterval(()=>{if(!document.hidden)nbPull()},45000);
+ try{NB.ch=db.channel("inbox-"+user.id).on("postgres_changes",{event:"INSERT",schema:"public",table:"inbox",filter:"user_id=eq."+user.id},()=>nbPull()).subscribe()}catch{}}
+function nbStop(){clearInterval(NB.t);NB.t=null;if(NB.ch){try{db.removeChannel(NB.ch)}catch{}NB.ch=null}NB.uid=null;NB.items=[];NB.unread=0;NB.seen=null;nbClose();const w=$("bellBtn")?.parentElement;if(w)w.hidden=true;document.title="Live Language Coach"}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&user)nbPull()});
+document.addEventListener("click",async e=>{const el=e.target.closest("[data-nb]");if(!el)return;e.preventDefault();const k=el.dataset.nb;
+ if(k==="readall"){await db.rpc("inbox_read",{p_id:null});return nbPull()}
+ if(k==="clear"){await db.rpc("inbox_clear");return nbPull()}
+ if(k==="perm"){try{await Notification.requestPermission()}catch{}return nbRenderPanel()}
+ if(k==="open"){const n=NB.items.find(x=>x.id===el.dataset.id);if(!n)return;if(!n.read_at){db.rpc("inbox_read",{p_id:n.id}).then(nbPull);n.read_at=new Date().toISOString();NB.unread=Math.max(0,NB.unread-1);nbPaint()}
+  nbClose();const l=n.link||{};const tabs=(TABS[role()]||[]).map(t=>t[0]);if(l.tab&&tabs.includes(l.tab)){stopTimers();RUN.st=null;LG=null;S.page="app";S.tab=l.tab;S.r=l.r?{...l.r}:null;S.video=null;render();window.scrollTo(0,0)}}});
+/* start or stop the bell whenever the page is drawn */
+const _render1=render;render=async function(){if(user)nbStart();else if(NB.uid)nbStop();return _render1()};
+
+/* staff: reset a student's password without email */
+ACT.resetpw=async el=>{const def=el.dataset.pw||"";const pw=prompt(`New password for ${el.dataset.name}.\nThe default is last name + year of birth. You can type a different one (at least 6 characters).`,def);
+ if(pw==null)return;if(pw.trim().length<6)return toast("The password must have at least 6 characters.");
+ await rpc("staff_reset_password",{p_student:el.dataset.id,p_password:pw.trim()});toast(`Password reset. Tell ${el.dataset.name} to log in with: ${pw.trim()}`)};
+TABS.teacher.push(["profile","Account"]);TABS.researcher.push(["profile","Account"]);
+
 (async function init(){
  if(!db){$("app").innerHTML='<div class="notice">Could not load the Supabase library. Check your internet connection.</div>';return}
  try{await loadUser()}catch(e){console.error(e)}
  db.auth.onAuthStateChange(async(ev)=>{if(ev==="SIGNED_OUT"){user=null;profile=null;sp=null;buildNav()}});
  if(user)S={page:"app",tab:homeTab()};
- render();
+ if(RECOVERY)S={page:"newpass"};
+ else if(AUTH_ERR){history.replaceState(null,"",location.pathname);setTimeout(()=>toast(/expired|invalid/i.test(AUTH_ERR)?"That link has expired. Please ask for a new password reset link.":AUTH_ERR),300)}
+ BOOTED=true;render();
 })();
