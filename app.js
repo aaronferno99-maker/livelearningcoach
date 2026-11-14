@@ -1139,9 +1139,10 @@ function rowToForm(c){ /* c = cells of one row */
  return {type:"match",q:r[0],pairs:(r[1]||"").split(/;|\n/).map(x=>x.replace(/\s*(->|→|-|:)\s*/,"=")).join("\n"),explanation:r[2]||r[6]}}
 function parseBlocks(txt){ /* numbered questions with options on their own lines */
  const out=[],errs=[];let cur=null;const push=()=>{if(cur){out.push(cur)};cur=null};
- const lines=txt.split("\n").map(l=>l.trim());
- for(const l of lines){if(!l){continue}
+ const lines=txt.split("\n").map(l=>l.trim()).filter(Boolean);const isOpt=l=>/^\(?[A-Da-d][).:\]]\s*\S/.test(l||"");
+ for(let li=0;li<lines.length;li++){const l=lines[li];
   let m;
+  if(cur&&(cur.ansSeen||cur.opts.length)&&!isOpt(l)&&isOpt(lines[li+1])&&!/^(?:correct\s+)?(?:answer|ans|key|explanation|reason|why)\s*[:.\-]/i.test(l)){push();cur={q:l.replace(/^(?:q(?:uestion)?\s*)?\d+\s*[).:\-]\s*/i,""),opts:[]};continue}
   if((m=l.match(/^\(?([A-Da-d])[).:\]]\s*(.+)$/))&&cur&&!cur.ansSeen){cur.opts["ABCD".indexOf(m[1].toUpperCase())]=m[2].trim();continue}
   if((m=l.match(/^(?:correct\s+)?(?:answer|ans|key)\s*[:.\-]\s*(.+)$/i))&&cur){cur.ans=m[1].trim();cur.ansSeen=true;continue}
   if((m=l.match(/^(?:explanation|reason|why)\s*[:.\-]\s*(.+)$/i))&&cur){cur.ex=m[1].trim();continue}
@@ -1150,7 +1151,7 @@ function parseBlocks(txt){ /* numbered questions with options on their own lines
   if(!cur){cur={q:l,opts:[]};continue}
   if(cur.ansSeen&&!cur.ex){cur.ex=l}}
  push();
- return out.map((b,i)=>{try{const o=b.opts.filter(Boolean);let f;
+ return out.filter(b=>b.opts.some(Boolean)||b.ans||/\?\s*$/.test(b.q)).map((b,i)=>{try{const o=b.opts.filter(Boolean);let f;
   if(o.length===2&&o.every(x=>/^(true|false)$/i.test(x))||(!o.length&&tfOf(b.ans)!=null)){const v=o.length?letterOf(b.ans,o):+tfOf(b.ans);f={type:"tf",q:b.q.replace(/\s*\(?true\s*(\/|or)\s*false\)?\s*[:?]?$/i,""),answer:String(o.length&&/^false$/i.test(o[v])?1:o.length?0:v),explanation:b.ex}}
   else{if(o.length<2)throw new Error("needs options A), B), C), D) on separate lines");const ai=letterOf(b.ans,o);if(ai<0)throw new Error(`add a line like "Answer: B" (found "${b.ans||"no answer"}")`);
    f={type:"mcq",q:b.q,o0:o[0],o1:o[1],o2:o[2],o3:o[3],answer:String(ai),explanation:b.ex}}
@@ -1640,6 +1641,188 @@ document.addEventListener("click",e=>{if(!e.target.closest(".navmore"))document.
 const _buildNav0=buildNav;buildNav=function(){_buildNav0();fitNav()};
 let _fitT;addEventListener("resize",()=>{clearTimeout(_fitT);_fitT=setTimeout(fitNav,120)});
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitNav);
+
+/* =====================================================================
+   v9 MODULE: live activities (no login for participants), quiz from
+   pasted text or uploaded files, timers, motion
+   ===================================================================== */
+PURPOSE.live="Live quiz";
+const TIMES=[10,15,20,30,45,60,90,120,180,300];
+const fmtSec=s=>s>=60?(s%60?`${Math.floor(s/60)} min ${s%60} s`:`${s/60} min`):`${s} s`;
+
+/* ---------- reading uploaded files: CSV / TXT / Excel (.xlsx) / Word (.docx) ---------- */
+let _jszipP=null;
+function loadJSZip(){if(window.JSZip)return Promise.resolve(window.JSZip);
+ return _jszipP||(_jszipP=new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";s.onload=()=>res(window.JSZip);s.onerror=()=>{_jszipP=null;rej(new Error("The file reader could not load. Check your internet connection, or copy and paste the text instead."))};document.head.appendChild(s)}))}
+const xmlText=s=>String(s).replace(/<[^>]+>/g,"").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCharCode(parseInt(n,16))).replace(/&amp;/g,"&");
+async function docxText(buf){
+ const z=await (await loadJSZip()).loadAsync(buf);let doc=await z.file("word/document.xml")?.async("string");if(!doc)throw new Error("This Word file could not be read.");
+ const num=await z.file("word/numbering.xml")?.async("string")||"";
+ const absFmt={},numAbs={};
+ num.replace(/<w:abstractNum\b[^>]*w:abstractNumId="(\d+)"[^>]*>([\s\S]*?)<\/w:abstractNum>/g,(_,id,body)=>{absFmt[id]={};body.replace(/<w:lvl\b[^>]*w:ilvl="(\d+)"[^>]*>([\s\S]*?)<\/w:lvl>/g,(__,lv,lb)=>{absFmt[id][lv]=(lb.match(/<w:numFmt\b[^>]*w:val="([^"]+)"/)||[])[1]||"decimal"})});
+ num.replace(/<w:num\b[^>]*w:numId="(\d+)"[^>]*>([\s\S]*?)<\/w:num>/g,(_,id,body)=>{const m=body.match(/<w:abstractNumId\b[^>]*w:val="(\d+)"/);if(m)numAbs[id]=m[1]});
+ const sty=await z.file("word/styles.xml")?.async("string")||"",styNum={};
+ sty.replace(/<w:style\b[^>]*w:styleId="([^"]+)"[^>]*>([\s\S]*?)<\/w:style>/g,(_,id,body)=>{const np=body.match(/<w:numPr>[\s\S]*?<\/w:numPr>/);if(np)styNum[id]=np[0]});
+ const tables=[];doc=doc.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g,t=>{tables.push(t.split(/<\/w:tr>/).map(tr=>tr.split(/<\/w:tc>/).map(tc=>xmlText(tc.replace(/<\/w:p>/g," ")).trim()).filter((c,i,a)=>i<a.length-1||c)).filter(r=>r.some(Boolean)).map(r=>r.join("\t")).join("\n"));return `<w:p><w:t>@@TBL${tables.length-1}@@</w:t></w:p>`});
+ const out=[];let qn=0,letter=0;
+ for(const p of doc.split(/<\/w:p>/)){
+  const t=xmlText(p.replace(/<w:tab\/>/g," ").replace(/<w:br\/>/g,"\n")).trim();
+  const tm=t.match(/^@@TBL(\d+)@@$/);if(tm){out.push(tables[+tm[1]]);continue}
+  let np=p.match(/<w:numPr>[\s\S]*?<\/w:numPr>/);if(!np){const ps=(p.match(/<w:pStyle\b[^>]*w:val="([^"]+)"/)||[])[1];if(ps&&styNum[ps])np=[styNum[ps]];else if(ps&&/^ListBullet/i.test(ps))np=['<w:numPr><w:ilvl w:val="0"/><w:numId w:val="__bullet"/></w:numPr>'];else if(ps&&/^ListNumber/i.test(ps))np=['<w:numPr><w:ilvl w:val="0"/><w:numId w:val="__decimal"/></w:numPr>']}
+  if(np&&t){const il=(np[0].match(/w:ilvl\b[^>]*w:val="(\d+)"/)||[])[1]||"0",nid=(np[0].match(/w:numId\b[^>]*w:val="(\d+)"/)||[])[1];const fmt=nid==="__bullet"?"bullet":nid==="__decimal"?"decimal":(absFmt[numAbs[nid]]||{})[il]||"decimal";
+   if(/letter|roman/i.test(fmt)||(fmt==="bullet"&&out.length&&letter<8)){out.push(`${"ABCDEFGH"[letter]||"D"}) ${t}`);letter++}
+   else{qn++;letter=0;out.push(`${qn}. ${t}`)}}
+  else if(t){out.push(t);if(!/^\(?[A-Da-d][).:]/.test(t))letter=0}}
+ return out.join("\n")}
+async function xlsxText(buf){
+ const z=await (await loadJSZip()).loadAsync(buf);const ss=[];
+ const sx=await z.file("xl/sharedStrings.xml")?.async("string");if(sx)sx.replace(/<si>([\s\S]*?)<\/si>/g,(_,b)=>{ss.push(xmlText(b.replace(/<rPh[\s\S]*?<\/rPh>/g,"")))});
+ let path="xl/worksheets/sheet1.xml";
+ try{const wb=await z.file("xl/workbook.xml").async("string"),rid=(wb.match(/<sheet\b[^>]*r:id="([^"]+)"/)||[])[1],rels=await z.file("xl/_rels/workbook.xml.rels").async("string");
+  const rel=[...rels.matchAll(/<Relationship\b[^>]*>/g)].map(m=>m[0]).find(r=>r.includes(`Id="${rid}"`));const tg=rel&&(rel.match(/Target="([^"]+)"/)||[])[1];if(tg)path=tg.startsWith("/")?tg.slice(1):"xl/"+tg}catch{}
+ const sh=await z.file(path)?.async("string");if(!sh)throw new Error("This Excel file has no readable sheet.");
+ const rows=[];
+ sh.replace(/<row\b[^>]*>([\s\S]*?)<\/row>/g,(_,rb)=>{const r=[];
+  rb.replace(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,(__,at,inner)=>{const ref=(at.match(/r="([A-Z]+)\d+"/)||[])[1];const col=ref?[...ref].reduce((a,ch)=>a*26+ch.charCodeAt(0)-64,0)-1:r.length;const t=(at.match(/\bt="([^"]+)"/)||[])[1];let v="";
+   if(inner){if(t==="s"){const m=inner.match(/<v>([\s\S]*?)<\/v>/);v=m?ss[+m[1]]||"":""}else if(t==="inlineStr")v=xmlText((inner.match(/<is>([\s\S]*?)<\/is>/)||[])[1]||"");else{const m=inner.match(/<v>([\s\S]*?)<\/v>/);v=m?xmlText(m[1]):""}}
+   r[col]=v});
+  rows.push(Array.from(r,x=>(x??"").replace(/[\t\r\n]+/g," ").trim()))});
+ return rows.filter(r=>r.some(Boolean)).map(r=>r.join("\t")).join("\n")}
+async function readQuizFile(file){
+ if(!file)return "";if(file.size>8e6)throw new Error("That file is larger than 8 MB.");
+ const n=file.name.toLowerCase();
+ if(n.endsWith(".docx"))return docxText(await file.arrayBuffer());
+ if(n.endsWith(".xlsx"))return xlsxText(await file.arrayBuffer());
+ if(/\.(doc|xls|ppt|pptx)$/.test(n))throw new Error("Please save the file as .docx (Word), .xlsx (Excel) or .csv and upload it again.");
+ if(n.endsWith(".pdf"))throw new Error("PDF files cannot be read here. Open the PDF, copy the questions and paste them into the box.");
+ return (await file.text()).replace(/^﻿/,"")}
+/* the editor in My library accepts the same files */
+CHG.edfile=async el=>{try{const t=await readQuizFile(el.files[0]);$("edImportTxt").value=t;toast("File loaded. Check the text, then press Import.")}catch(e){toast(e.message)}el.value=""};
+
+/* ---------- staff: Live activities page ---------- */
+const LTYPES=[["quiz","Live quiz","◉","Many questions, a timer and a leaderboard"],["poll","Live poll","▤","One question, choices shown as growing bars"],["word","Word cloud","✺","Words grow as more people send them"],["open","Open response","✎","Short written answers appear as they arrive"]];
+function timerSel(name,val,none){return `<select name="${name}" ${name==="seconds"?"":""}>${none?`<option value="">No timer</option>`:""}${TIMES.map(t=>`<option value="${t}" ${+val===t?"selected":""}>${fmtSec(t)}</option>`).join("")}</select>`}
+async function liveTabStaff(){
+ const r=R();if(S.present)return presentPage(S.present);if(r.view==="host")return hostPage();
+ const t=r.lt||"quiz";
+ const [ss,lq]=await Promise.all([ok(db.from("sessions").select("id,title,code,activity_type,is_open,created_at").order("created_at",{ascending:false}).limit(20)),ok(db.from("activities").select("id,title,questions,created_at,purpose,kind").eq("purpose","live").order("created_at",{ascending:false}))]);
+ const card=LTYPES.map(([k,n,i,d])=>`<button type="button" class="ltype ${t===k?"on":""}" data-act="ltype" data-k="${k}"><i>${i}</i><b>${n}</b><span>${d}</span></button>`).join("");
+ let form;
+ if(t==="quiz")form=`<form data-form="lqcreate" class="card stack lbuild"><div class="form-grid"><label>Quiz title<input name="title" required value="${esc(r.lqTitle||"")}" placeholder="e.g. Coastal words, Week 2"></label><label>Time for each question${timerSel("seconds",r.lqSec||20)}</label></div>
+  <label>Paste your questions, or upload a file<textarea name="txt" id="lqText" rows="10" placeholder="1. What is a tide?&#10;A) Rise and fall of the sea&#10;B) A fish&#10;C) A boat&#10;D) A net&#10;Answer: A&#10;Explanation: Tides are the rise and fall of the sea.">${esc(r.lqText||"")}</textarea></label>
+  <div class="upl"><label class="filebtn"><input type="file" accept=".csv,.txt,.tsv,.xlsx,.docx" data-chg="lqfile">⬆ Upload a file</label><span class="muted small">Word (.docx), Excel (.xlsx), CSV or text. Numbered questions with A) B) C) D) options and "Answer: B", or the template columns.</span><button type="button" class="linklike" data-act="lqtemplate">Download the template</button></div>
+  ${r.lqErrs?.length?`<div class="notice"><b>${r.lqErrs.length} part(s) could not be read:</b><ul class="small">${r.lqErrs.slice(0,10).map(e=>`<li>${esc(e)}</li>`).join("")}</ul></div>`:""}
+  <div class="actions" style="margin:0"><button type="button" class="soft" data-act="lqcheck">Check questions</button><button class="primary big-btn">Create and start ▶</button></div><div id="lqPreview">${r.lqPrev||""}</div></form>`;
+ else form=`<form data-form="session" data-type="${t}" class="card stack lbuild"><div class="form-grid"><label>Title<input name="title" required placeholder="e.g. Warm-up"></label><label>Timer${timerSel("timer","",true)}</label></div>
+  <label>${t==="word"?"Prompt (e.g. One word that describes the sea)":t==="open"?"Question":"Question"}<textarea name="prompt" rows="2" required></textarea></label>
+  ${t==="poll"?`<label>Choices, one per line (you can paste them)<textarea name="options" rows="4" required placeholder="Listening&#10;Speaking&#10;Reading&#10;Writing"></textarea></label>`:""}
+  <button class="primary big-btn">Create and start ▶</button></form>`;
+ const lqList=lq.map(a=>`<div class="activity"><div class="badge">Quiz</div><div class="info"><b>${esc(a.title)}</b><small>${a.questions.length} questions · ${new Date(a.created_at).toLocaleDateString()}</small></div><button class="soft" data-act="lqhost" data-id="${a.id}">Start again</button><button class="soft" data-act="libedit2" data-id="${a.id}">Edit</button><button class="outline danger" data-act="lqdel" data-id="${a.id}">Delete</button></div>`).join("");
+ const sList=ss.map(x=>`<div class="activity"><div class="badge">${({poll:"Poll",word:"Word cloud",quiz:"Question",open:"Open"})[x.activity_type]}</div><div class="info"><b>${esc(x.title)}</b><small>Code ${x.code} · ${x.is_open?"open":"closed"}</small></div><button class="soft" data-act="present" data-id="${x.id}">Open</button><button class="outline danger" data-act="sessdel" data-id="${x.id}">Delete</button></div>`).join("");
+ return `${await liveCard()}<div class="head"><div class="eyebrow">LIVE CLASSROOM</div><h1>Live activities</h1><p>Participants go to <b>${esc(location.host)}</b>, open <b>Join live</b>, and type the six-digit code and their name. No login is needed.</p></div>
+ <div class="ltypes">${card}</div>${form}
+ <div class="card" style="margin-top:16px"><h3>Your live quizzes</h3>${lqList||'<p class="muted small">None yet.</p>'}</div>
+ <div class="card" style="margin-top:16px"><h3>Polls, word clouds and open responses</h3>${sList||'<p class="muted small">None yet.</p>'}</div>`}
+function lqParse(){const t=$("lqText")?.value||"";const r=parseImport(t,"quiz");return {t,...r}}
+function lqPreview(out){return out.length?`<div class="lqprev"><b>${out.length} question${out.length>1?"s":""} ready</b><ol>${out.slice(0,50).map(x=>`<li>${esc(qLabel(x.q))} <span class="muted small">· ${typeName[x.q.type]}</span></li>`).join("")}</ol></div>`:""}
+Object.assign(ACT,{
+ ltype(el){setR({lt:el.dataset.k})},
+ lqtemplate(){download("live_quiz_template.csv",templateCSV("quiz"))},
+ lqcheck(){const f=document.querySelector("form[data-form=lqcreate]");const p=lqParse();Object.assign(R(),{lqText:p.t,lqErrs:p.errs,lqPrev:lqPreview(p.out),lqTitle:f.title.value,lqSec:f.seconds.value});render();toast(p.out.length?`${p.out.length} question(s) ready${p.errs.length?`, ${p.errs.length} part(s) skipped`:""}.`:"No questions found yet. Check the format or download the template.")},
+ async lqhost(el){const sec=+(document.querySelector("form[data-form=lqcreate] [name=seconds]")?.value||20);const g=await rpc("live_host",{p_activity:el.dataset.id,p_seconds:sec});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},
+ async lqdel(el){if(!confirm("Delete this live quiz and its saved results?"))return;await ok(db.from("activities").delete().eq("id",el.dataset.id));toast("Deleted.");render()},
+ async libedit2(el){await loadED(el.dataset.id);S.tab="library";S.r={view:"edit",id:el.dataset.id};render()},
+ async sessdel(el){if(!confirm("Delete this activity and its responses?"))return;await ok(db.from("sessions").delete().eq("id",el.dataset.id));toast("Deleted.");render()},
+ presentback(){S.present=null;stopTimers();if(channel){db.removeChannel(channel);channel=null}render()},
+ async pause(el){await ok(db.from("sessions").update({is_open:el.dataset.open==="1"}).eq("id",el.dataset.id));render()},
+ async sessend(el){await ok(db.from("sessions").update({is_open:false,ends_at:new Date().toISOString()}).eq("id",el.dataset.id));toast("Activity closed.");render()},
+ async sessrestart(el){const sec=+($("sessTimer")?.value||0);await ok(db.from("sessions").update({is_open:true,timer_seconds:sec||null,ends_at:sec?new Date(Date.now()+sec*1000).toISOString():null}).eq("id",el.dataset.id));toast(sec?`Timer started: ${fmtSec(sec)}.`:"Open with no timer.");render()}});
+CHG.lqfile=async el=>{try{const t=await readQuizFile(el.files[0]);const f=document.querySelector("form[data-form=lqcreate]");const p=parseImport(t,"quiz");
+  Object.assign(R(),{lqText:t,lqErrs:p.errs,lqPrev:lqPreview(p.out),lqTitle:f.title.value||el.files[0].name.replace(/\.[^.]+$/,"").replace(/[_-]+/g," "),lqSec:f.seconds.value});render();
+  toast(p.out.length?`${p.out.length} question(s) found in the file${p.errs.length?`, ${p.errs.length} part(s) skipped`:""}. Press Create and start.`:"No questions were found in that file. Check the format or download the template.")}catch(e){toast(e.message)}el.value=""};
+CHG.lgtimer=async el=>{await rpc("live_set_timer",{p_game:LG.id,p_seconds:+el.value});await lgPull();toast(`Time per question: ${fmtSec(+el.value)}.`)};
+Object.assign(FORM,{
+ async lqcreate(f,d){const p=parseImport(d.get("txt"),"quiz");if(!p.out.length)return toast(p.errs[0]?`No questions found. ${p.errs[0]}`:"Paste questions or upload a file first.");
+  if(p.errs.length&&!confirm(`${p.out.length} question(s) are ready and ${p.errs.length} part(s) could not be read. Start with the ${p.out.length} question(s)?`))return;
+  const id=await rpc("save_activity",{p_id:null,p_data:{kind:"quiz",purpose:"live",title:String(d.get("title")).trim(),questions:p.out.map(x=>x.q),status:"published"},p_keys:p.out.map(x=>x.k)});
+  const g=await rpc("live_host",{p_activity:id,p_seconds:+d.get("seconds")||20});LG={id:g.id,host:true};await lgPull();S.r={view:"host",id:g.id};render();window.scrollTo(0,0)},
+ async session(f,d){const type=f.dataset.type||d.get("type"),opts=String(d.get("options")||"").split("\n").map(x=>x.trim()).filter(Boolean);
+  if((type==="poll"||type==="quiz")&&opts.length<2)return toast("Add at least two choices.");if(new Set(opts).size!==opts.length)return toast("Each choice must be different.");
+  const sec=+d.get("timer")||0;let code,n=0;do{code=String(Math.floor(100000+Math.random()*900000));n++}while(n<6&&((await db.from("sessions").select("id").eq("code",code)).data||[]).length);
+  const r=await ok(db.from("sessions").insert({owner_id:user.id,code,title:d.get("title"),prompt:d.get("prompt"),activity_type:type,options:(type==="poll"||type==="quiz")?opts:[],correct_answer:type==="quiz"?opts[0]:null,anonymous_allowed:true,is_open:true,timer_seconds:sec||null,ends_at:sec?new Date(Date.now()+sec*1000).toISOString():null}).select("id").single());
+  S.present=r.id;render();window.scrollTo(0,0)}});
+
+/* ---------- presenter screen with motion ---------- */
+let PR=null; /* {s, words:{}, open:0, total} */
+async function presentPage(id){
+ const s=await ok(db.from("sessions").select("*").eq("id",id).single());sessionNow=s;PR={s,words:{},shown:0,total:-1,ended:false};
+ stopTimers();S.after=()=>{refreshResults();every(2500,refreshResults);every(250,prTick);if(channel)db.removeChannel(channel);try{channel=db.channel("r-"+id).on("postgres_changes",{event:"INSERT",schema:"public",table:"responses",filter:`session_id=eq.${id}`},refreshResults).subscribe()}catch{}};
+ const kind=({poll:"LIVE POLL",word:"WORD CLOUD",quiz:"QUESTION",open:"OPEN RESPONSE"})[s.activity_type];
+ return `<div class="pres"><div class="pres-head"><div><div class="eyebrow">${kind}</div><h1>${esc(s.title)}</h1><p class="pres-q">${esc(s.prompt)}</p></div>
+ <div class="joinbox"><span>Join at <b>${esc(location.host)}</b> → Join live</span><div class="code">${s.code.split("").map((c,i)=>`<i style="--i:${i}">${c}</i>`).join("")}</div></div></div>
+ <div class="pres-bar"><div class="ptimer ${s.ends_at?"":"hidden"}"><b id="prSec">–</b><div class="tbar"><i id="prBar"></i></div></div><span class="pcount"><b id="total">0</b> responses</span>
+  <span class="chip ${s.is_open?"c-Completed":"c-Locked"}" id="prState">${s.is_open?"Open":"Closed"}</span>
+  <div class="actions" style="margin:0"><select id="sessTimer" aria-label="Timer"><option value="">No timer</option>${TIMES.map(t=>`<option value="${t}" ${s.timer_seconds===t?"selected":""}>${fmtSec(t)}</option>`).join("")}</select><button class="soft" data-act="sessrestart" data-id="${s.id}">${s.is_open?"Restart timer":"Reopen"}</button>${s.is_open?`<button class="soft" data-act="pause" data-id="${s.id}" data-open="0">Pause</button><button class="outline danger" data-act="sessend" data-id="${s.id}">End</button>`:""}<button class="soft" data-act="csv" data-id="${s.id}">CSV</button><button class="outline" data-act="presentback">Back</button></div></div>
+ <div class="card pres-stage"><div id="results" class="res-${s.activity_type}"><div class="waiting"><span></span><span></span><span></span><p>Waiting for responses…</p></div></div></div></div>`}
+function prTick(){if(!PR||!PR.s.ends_at)return;const left=Math.max(0,(new Date(PR.s.ends_at).getTime()-Date.now())/1000),tot=PR.s.timer_seconds||60;const b=$("prBar"),t=$("prSec");if(!b)return;
+ b.style.width=Math.min(100,100*left/tot)+"%";b.parentElement.classList.toggle("warn",left<=5);t.textContent=left>0?Math.ceil(left)+"s":"Time's up";
+ if(left<=0&&PR.s.is_open&&!PR.ended){PR.ended=true;db.from("sessions").update({is_open:false}).eq("id",PR.s.id).then(()=>{PR.s.is_open=false;const st=$("prState");if(st){st.textContent="Closed";st.className="chip c-Locked"}})}}
+const WCOL=["#5a4fcf","#0f9d90","#d9822b","#cf4f7a","#3d7be0","#7b5bd6","#139a6b"];
+async function refreshResults(){
+ const s=sessionNow;const box=$("results");if(!s||!box||!PR)return;
+ const rows=(await db.from("responses").select("participant_name,answer,created_at").eq("session_id",s.id).order("created_at")).data||[];
+ const tot=$("total");if(tot&&rows.length!==PR.total){tot.textContent=rows.length;tot.classList.remove("bump");void tot.offsetWidth;tot.classList.add("bump");PR.total=rows.length}
+ if(!rows.length)return;box.querySelector(".waiting")?.remove();
+ if(s.activity_type==="poll"||s.activity_type==="quiz"){
+  const c={};rows.forEach(r=>c[r.answer]=(c[r.answer]||0)+1);const max=Math.max(...s.options.map(o=>c[o]||0));
+  if(!box.querySelector(".pollbars"))box.innerHTML=`<div class="pollbars">${s.options.map((o,i)=>`<div class="pb" style="--i:${i}" data-o="${esc(o)}"><div class="pb-top"><b>${esc(o)}${s.correct_answer===o?" ✓":""}</b><span class="pb-n">0</span></div><div class="pb-track"><i class="c${i%4}"></i></div></div>`).join("")}</div>`;
+  [...box.querySelectorAll(".pb")].forEach((el,i)=>{const o=s.options[i],n=c[o]||0,p=Math.round(100*n/rows.length);el.querySelector("i").style.width=Math.max(p,n?3:0)+"%";el.querySelector(".pb-n").textContent=`${n} · ${p}%`;el.classList.toggle("lead",n===max&&n>0)})}
+ else if(s.activity_type==="word"){
+  const w={};rows.forEach(r=>r.answer.toLowerCase().split(/[\s,.;!?]+/).filter(x=>x.length>1).forEach(x=>w[x]=(w[x]||0)+1));
+  let cl=box.querySelector(".cloud2");if(!cl){box.innerHTML='<div class="cloud2"></div>';cl=box.querySelector(".cloud2")}
+  const max=Math.max(...Object.values(w));
+  Object.entries(w).sort((a,b)=>b[1]-a[1]).slice(0,80).forEach(([k,n],i)=>{let el=PR.words[k];
+   if(!el){el=document.createElement("b");el.textContent=k;el.style.color=WCOL[Object.keys(PR.words).length%WCOL.length];el.style.setProperty("--r",((k.length*37)%11-5)+"deg");el.className="wpop";PR.words[k]=el;cl.appendChild(el)}
+   const size=16+Math.round(44*Math.sqrt(n/max));if(el.dataset.n!==String(n)){el.style.fontSize=size+"px";el.dataset.n=n;if(n>1){el.classList.remove("wgrow");void el.offsetWidth;el.classList.add("wgrow")}}el.title=`${n} ${n>1?"people":"person"}`})}
+ else{let ls=box.querySelector(".resp");if(!ls){box.innerHTML='<div class="resp"></div>';ls=box.querySelector(".resp");PR.shown=0}
+  rows.slice(PR.shown).forEach(r=>{const d=document.createElement("div");d.className="rcard";d.innerHTML=`<p>${esc(r.answer)}</p><small>${esc(r.participant_name||"Anonymous")}</small>`;ls.prepend(d)});PR.shown=rows.length}}
+
+/* ---------- participants (no login needed) ---------- */
+let PART=null;
+function remember(n){try{sessionStorage.setItem("llc_name",n)}catch{}}
+ACT.lookup=async()=>{
+ const code=($("joinCode")?.value||"").trim();if(!/^\d{6}$/.test(code))return toast("Type the six-digit code.");
+ const name=($("displayName")?.value||"").trim();if(name)remember(name);
+ if(await joinLiveQuiz(code))return;
+ const r=await db.rpc("get_public_session",{join_code:code});if(r.error||!r.data?.length)return toast("No live activity found with that code. Check the code with your teacher.");
+ const x=r.data[0];if(!x.session_open)return toast("This activity is closed.");
+ if(!user&&name.length<2){$("displayName")?.focus();return toast("Type your name, then press Join.")}
+ PART={code,x,name:user?(name||profile?.full_name||""):name,skew:new Date(x.server_now).getTime()-Date.now(),sent:0};sessionNow={code,activity_type:x.activity_type};partRender()};
+function partRender(){const P=PART,x=P.x,box=$("participant");if(!box)return;const opt=["poll","quiz"].includes(x.activity_type);
+ box.innerHTML=`<div class="pcard-in"><div class="row"><div class="eyebrow">${esc(x.session_title)}</div>${x.ends_at?`<span class="ptimer small"><b id="paSec"></b></span>`:""}</div>${x.ends_at?'<div class="tbar"><i id="paBar"></i></div>':""}
+ <div class="question">${esc(x.session_prompt)}</div>
+ <div id="answers">${opt?x.activity_options.map((o,i)=>`<button type="button" class="answer" style="--i:${i}" data-act="pickans" data-a="${esc(o)}">${esc(o)}</button>`).join(""):`<textarea id="free" maxlength="${x.activity_type==="word"?"60":"600"}" placeholder="${x.activity_type==="word"?"Type a word or two":"Type your answer"}"></textarea>`}</div>
+ <button class="primary sendbtn" data-act="send">Send</button><p class="muted small">Answering as <b>${esc(P.name||"Guest")}</b></p></div>`;
+ setTimeout(()=>box.scrollIntoView({behavior:"smooth",block:"start"}),60);
+ stopTimers();if(x.ends_at){const tot=Math.max(5,(new Date(x.ends_at).getTime()-(Date.now()+P.skew))/1000);every(250,()=>{const l=Math.max(0,(new Date(x.ends_at).getTime()-(Date.now()+P.skew))/1000),b=$("paBar"),t=$("paSec");if(!b){stopTimers();return}b.style.width=Math.min(100,100*l/tot)+"%";b.parentElement.classList.toggle("warn",l<=5);t.textContent=l>0?Math.ceil(l)+" s left":"Time's up";if(l<=0){document.querySelectorAll("#participant .answer,#participant .sendbtn,#free").forEach(e=>e.disabled=true)}})}}
+ACT.pickans=el=>{document.querySelectorAll(".answer").forEach(b=>b.classList.remove("selected"));el.classList.add("selected");$("answers").dataset.a=el.dataset.a};
+ACT.send=async()=>{const P=PART;if(!P)return;const a=$("answers"),ans=a?.dataset.a||$("free")?.value.trim();if(!ans)return toast("Choose or type an answer.");
+ const r=await db.rpc("submit_session_response",{join_code:P.code,answer_text:ans,display_name:P.name||null});if(r.error)return toast(r.error.message);P.sent++;
+ const again=P.x.activity_type!=="poll"&&P.x.activity_type!=="quiz";stopTimers();
+ $("participant").innerHTML=`<div class="sent"><svg viewBox="0 0 52 52" class="tick" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg><h3>Sent! Thank you${P.name?", "+esc(P.name.split(" ")[0]):""}.</h3><p class="muted">Your answer is on the presenter's screen.</p>${again?'<button class="soft" data-act="sendmore">Send another answer</button>':""}<button class="outline" data-act="joinother">Join another code</button></div>`};
+ACT.sendmore=()=>partRender();
+ACT.joinother=()=>{PART=null;stopTimers();const p=$("participant");if(p)p.innerHTML="";const c=$("joinCode");if(c){c.value="";c.focus()}};
+/* fill the name the participant used before */
+const _joinPage0=joinPage;joinPage=function(inApp){let h=_joinPage0(inApp);let n="";try{n=sessionStorage.getItem("llc_name")||""}catch{};if(n&&!profile)h=h.replace('id="displayName" value=""',`id="displayName" value="${esc(n)}"`);return h};
+
+/* ---------- live quiz host: timer control + motion ---------- */
+const _hostPage0=hostPage;hostPage=async function(){let h=await _hostPage0();const g=LG?.game;
+ if(g&&(g.phase==="lobby"||g.phase==="reveal"))h=h.replace('<div class="actions">',`<label class="lgtimer">Time per question <select data-chg="lgtimer">${TIMES.map(t=>`<option value="${t}" ${g.seconds===t?"selected":""}>${fmtSec(t)}</option>`).join("")}</select></label><div class="actions">`);
+ return h};
+
+/* ---------- tab wiring ---------- */
+TAB.live=async()=>{if(role()==="student"){if(R().view==="play")return playPage();return (await liveCard())+joinPage(true)}return liveTabStaff()};
+const _nav2=ACT.nav;ACT.nav=async(el,e)=>{S.present=null;PR=null;return _nav2(el,e)};
 
 (async function init(){
  if(!db){$("app").innerHTML='<div class="notice">Could not load the Supabase library. Check your internet connection.</div>';return}
