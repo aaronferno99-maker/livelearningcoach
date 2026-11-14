@@ -1715,7 +1715,9 @@ async function liveTabStaff(){
   <div class="actions" style="margin:0"><button type="button" class="soft" data-act="lqcheck">Check questions</button><button class="primary big-btn">Create and start ▶</button></div><div id="lqPreview">${r.lqPrev||""}</div></form>`;
  else form=`<form data-form="session" data-type="${t}" class="card stack lbuild"><div class="form-grid"><label>Title<input name="title" required placeholder="e.g. Warm-up"></label><label>Timer${timerSel("timer","",true)}</label></div>
   <label>${t==="word"?"Prompt (e.g. One word that describes the sea)":t==="open"?"Question":"Question"}<textarea name="prompt" rows="2" required></textarea></label>
-  ${t==="poll"?`<label>Choices, one per line (you can paste them)<textarea name="options" rows="4" required placeholder="Listening&#10;Speaking&#10;Reading&#10;Writing"></textarea></label>`:""}
+  ${t==="poll"?`<label>Choices, one per line. Paste as many as you need, or upload a file<textarea name="options" id="pollOpts" rows="6" required placeholder="Listening&#10;Speaking&#10;Reading&#10;Writing" data-inp="pollcount"></textarea></label>
+  <div class="upl"><label class="filebtn"><input type="file" accept=".csv,.txt,.tsv,.xlsx,.docx" data-chg="pollfile">⬆ Upload choices</label><span class="muted small" id="pollCount">Word (.docx), Excel (.xlsx), CSV or text: one choice per line or per cell. A first line ending in "?" (or starting with "Question:") becomes the question.</span><button type="button" class="linklike" data-act="polltemplate">Download the template</button></div>
+  <label class="check"><input type="checkbox" name="show_results" checked> Show the live percentages on participants' phones after they vote</label>`:""}
   <button class="primary big-btn">Create and start ▶</button></form>`;
  const lqList=lq.map(a=>`<div class="activity"><div class="badge">Quiz</div><div class="info"><b>${esc(a.title)}</b><small>${a.questions.length} questions · ${new Date(a.created_at).toLocaleDateString()}</small></div><button class="soft" data-act="lqhost" data-id="${a.id}">Start again</button><button class="soft" data-act="libedit2" data-id="${a.id}">Edit</button><button class="outline danger" data-act="lqdel" data-id="${a.id}">Delete</button></div>`).join("");
  const sList=ss.map(x=>`<div class="activity"><div class="badge">${({poll:"Poll",word:"Word cloud",quiz:"Question",open:"Open"})[x.activity_type]}</div><div class="info"><b>${esc(x.title)}</b><small>Code ${x.code} · ${x.is_open?"open":"closed"}</small></div><button class="soft" data-act="present" data-id="${x.id}">Open</button><button class="outline danger" data-act="sessdel" data-id="${x.id}">Delete</button></div>`).join("");
@@ -1746,10 +1748,10 @@ Object.assign(FORM,{
   if(p.errs.length&&!confirm(`${p.out.length} question(s) are ready and ${p.errs.length} part(s) could not be read. Start with the ${p.out.length} question(s)?`))return;
   const id=await rpc("save_activity",{p_id:null,p_data:{kind:"quiz",purpose:"live",title:String(d.get("title")).trim(),questions:p.out.map(x=>x.q),status:"published"},p_keys:p.out.map(x=>x.k)});
   const g=await rpc("live_host",{p_activity:id,p_seconds:+d.get("seconds")||20});LG={id:g.id,host:true};await lgPull();S.r={view:"host",id:g.id};render();window.scrollTo(0,0)},
- async session(f,d){const type=f.dataset.type||d.get("type"),opts=String(d.get("options")||"").split("\n").map(x=>x.trim()).filter(Boolean);
+ async session(f,d){const type=f.dataset.type||d.get("type"),opts=type==="poll"?pollChoices(String(d.get("options")||"")).opts:String(d.get("options")||"").split("\n").map(x=>x.trim()).filter(Boolean);
   if((type==="poll"||type==="quiz")&&opts.length<2)return toast("Add at least two choices.");if(new Set(opts).size!==opts.length)return toast("Each choice must be different.");
   const sec=+d.get("timer")||0;let code,n=0;do{code=String(Math.floor(100000+Math.random()*900000));n++}while(n<6&&((await db.from("sessions").select("id").eq("code",code)).data||[]).length);
-  const r=await ok(db.from("sessions").insert({owner_id:user.id,code,title:d.get("title"),prompt:d.get("prompt"),activity_type:type,options:(type==="poll"||type==="quiz")?opts:[],correct_answer:type==="quiz"?opts[0]:null,anonymous_allowed:true,is_open:true,timer_seconds:sec||null,ends_at:sec?new Date(Date.now()+sec*1000).toISOString():null}).select("id").single());
+  const r=await ok(db.from("sessions").insert({owner_id:user.id,code,title:d.get("title"),prompt:d.get("prompt"),activity_type:type,options:(type==="poll"||type==="quiz")?opts:[],correct_answer:type==="quiz"?opts[0]:null,anonymous_allowed:true,show_results:type==="poll"?d.get("show_results")==="on":true,is_open:true,timer_seconds:sec||null,ends_at:sec?new Date(Date.now()+sec*1000).toISOString():null}).select("id").single());
   S.present=r.id;render();window.scrollTo(0,0)}});
 
 /* ---------- presenter screen with motion ---------- */
@@ -1760,7 +1762,7 @@ async function presentPage(id){
  const kind=({poll:"LIVE POLL",word:"WORD CLOUD",quiz:"QUESTION",open:"OPEN RESPONSE"})[s.activity_type];
  return `<div class="pres"><div class="pres-head"><div><div class="eyebrow">${kind}</div><h1>${esc(s.title)}</h1><p class="pres-q">${esc(s.prompt)}</p></div>
  <div class="joinbox"><span>Join at <b>${esc(location.host)}</b> → Join live</span><div class="code">${s.code.split("").map((c,i)=>`<i style="--i:${i}">${c}</i>`).join("")}</div></div></div>
- <div class="pres-bar"><div class="ptimer ${s.ends_at?"":"hidden"}"><b id="prSec">–</b><div class="tbar"><i id="prBar"></i></div></div><span class="pcount"><b id="total">0</b> responses</span>
+ <div class="pres-bar"><div class="ptimer ${s.ends_at?"":"hidden"}"><b id="prSec">–</b><div class="tbar"><i id="prBar"></i></div></div><span class="pcount"><span class="livedot" aria-hidden="true"></span><b id="total">0</b> responses</span>${s.activity_type==="poll"?`<button class="chip ${s.show_results?"c-Completed":"c-Locked"}" data-act="showres" data-id="${s.id}" data-on="${s.show_results?1:0}" title="Show the live percentages on participants' phones">Phones: results ${s.show_results?"on":"off"}</button>`:""}
   <span class="chip ${s.is_open?"c-Completed":"c-Locked"}" id="prState">${s.is_open?"Open":"Closed"}</span>
   <div class="actions" style="margin:0"><select id="sessTimer" aria-label="Timer"><option value="">No timer</option>${TIMES.map(t=>`<option value="${t}" ${s.timer_seconds===t?"selected":""}>${fmtSec(t)}</option>`).join("")}</select><button class="soft" data-act="sessrestart" data-id="${s.id}">${s.is_open?"Restart timer":"Reopen"}</button>${s.is_open?`<button class="soft" data-act="pause" data-id="${s.id}" data-open="0">Pause</button><button class="outline danger" data-act="sessend" data-id="${s.id}">End</button>`:""}<button class="soft" data-act="csv" data-id="${s.id}">CSV</button><button class="outline" data-act="presentback">Back</button></div></div>
  <div class="card pres-stage"><div id="results" class="res-${s.activity_type}"><div class="waiting"><span></span><span></span><span></span><p>Waiting for responses…</p></div></div></div></div>`}
@@ -1775,8 +1777,8 @@ async function refreshResults(){
  if(!rows.length)return;box.querySelector(".waiting")?.remove();
  if(s.activity_type==="poll"||s.activity_type==="quiz"){
   const c={};rows.forEach(r=>c[r.answer]=(c[r.answer]||0)+1);const max=Math.max(...s.options.map(o=>c[o]||0));
-  if(!box.querySelector(".pollbars"))box.innerHTML=`<div class="pollbars">${s.options.map((o,i)=>`<div class="pb" style="--i:${i}" data-o="${esc(o)}"><div class="pb-top"><b>${esc(o)}${s.correct_answer===o?" ✓":""}</b><span class="pb-n">0</span></div><div class="pb-track"><i class="c${i%4}"></i></div></div>`).join("")}</div>`;
-  [...box.querySelectorAll(".pb")].forEach((el,i)=>{const o=s.options[i],n=c[o]||0,p=Math.round(100*n/rows.length);el.querySelector("i").style.width=Math.max(p,n?3:0)+"%";el.querySelector(".pb-n").textContent=`${n} · ${p}%`;el.classList.toggle("lead",n===max&&n>0)})}
+  if(!box.querySelector(".pollbars"))box.innerHTML=`<div class="pollbars">${s.options.map((o,i)=>`<div class="pb" style="--i:${i}" data-o="${esc(o)}"><div class="pb-top"><b>${esc(o)}${s.correct_answer===o?" ✓":""}</b><span class="pb-n">0</span></div><div class="pb-track"><i class="c${i%4}"><em class="pb-pct">0%</em></i></div></div>`).join("")}</div>`;
+  [...box.querySelectorAll(".pb")].forEach((el,i)=>{const o=s.options[i],n=c[o]||0,p=Math.round(100*n/rows.length);el.querySelector("i").style.width=Math.max(p,n?3:0)+"%";countTo(el,n,p);el.classList.toggle("lead",n===max&&n>0)})}
  else if(s.activity_type==="word"){
   const w={};rows.forEach(r=>r.answer.toLowerCase().split(/[\s,.;!?]+/).filter(x=>x.length>1).forEach(x=>w[x]=(w[x]||0)+1));
   let cl=box.querySelector(".cloud2");if(!cl){box.innerHTML='<div class="cloud2"></div>';cl=box.querySelector(".cloud2")}
@@ -1809,6 +1811,7 @@ ACT.pickans=el=>{document.querySelectorAll(".answer").forEach(b=>b.classList.rem
 ACT.send=async()=>{const P=PART;if(!P)return;const a=$("answers"),ans=a?.dataset.a||$("free")?.value.trim();if(!ans)return toast("Choose or type an answer.");
  const r=await db.rpc("submit_session_response",{join_code:P.code,answer_text:ans,display_name:P.name||null});if(r.error)return toast(r.error.message);P.sent++;
  const again=P.x.activity_type!=="poll"&&P.x.activity_type!=="quiz";stopTimers();
+ if(P.x.activity_type==="poll"){const live=await pollLive(P,ans);if(live)return}
  $("participant").innerHTML=`<div class="sent"><svg viewBox="0 0 52 52" class="tick" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg><h3>Sent! Thank you${P.name?", "+esc(P.name.split(" ")[0]):""}.</h3><p class="muted">Your answer is on the presenter's screen.</p>${again?'<button class="soft" data-act="sendmore">Send another answer</button>':""}<button class="outline" data-act="joinother">Join another code</button></div>`};
 ACT.sendmore=()=>partRender();
 ACT.joinother=()=>{PART=null;stopTimers();const p=$("participant");if(p)p.innerHTML="";const c=$("joinCode");if(c){c.value="";c.focus()}};
@@ -1823,6 +1826,133 @@ const _hostPage0=hostPage;hostPage=async function(){let h=await _hostPage0();con
 /* ---------- tab wiring ---------- */
 TAB.live=async()=>{if(role()==="student"){if(R().view==="play")return playPage();return (await liveCard())+joinPage(true)}return liveTabStaff()};
 const _nav2=ACT.nav;ACT.nav=async(el,e)=>{S.present=null;PR=null;return _nav2(el,e)};
+
+/* ---------- v10: live percentages ---------- */
+/* numbers count up smoothly to the new value */
+function countTo(el,n,p){const lab=el.querySelector(".pb-n"),pc=el.querySelector(".pb-pct");const from=+(el.dataset.p||0);el.dataset.p=p;
+ const fin=()=>{lab.textContent=`${n} · ${p}%`;if(pc)pc.textContent=p+"%"};
+ if(from===p||matchMedia("(prefers-reduced-motion: reduce)").matches)return fin();
+ const t0=performance.now(),dur=700;const step=t=>{const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,3),v=Math.round(from+(p-from)*e);lab.textContent=`${n} · ${v}%`;if(pc)pc.textContent=v+"%";if(k<1)requestAnimationFrame(step);else fin()};requestAnimationFrame(step)}
+ACT.showres=async el=>{const on=el.dataset.on!=="1";await ok(db.from("sessions").update({show_results:on}).eq("id",el.dataset.id));sessionNow.show_results=on;PR.s.show_results=on;
+ el.dataset.on=on?1:0;el.textContent=`Phones: results ${on?"on":"off"}`;el.className=`chip ${on?"c-Completed":"c-Locked"}`;toast(on?"Participants now see the live percentages after voting.":"Participants no longer see the results.")};
+/* participant view after voting: the same bars, updating every 2 seconds */
+async function pollLive(P,mine){const r=await db.rpc("get_poll_results",{join_code:P.code});if(r.error||!r.data)return false;
+ const box=$("participant");const opts=r.data.options||P.x.activity_options;
+ box.innerHTML=`<div class="sent pollsent"><svg viewBox="0 0 52 52" class="tick small" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg><h3>Vote sent${P.name?", "+esc(P.name.split(" ")[0]):""}!</h3>
+ <div class="row livehead"><span class="livedot" aria-hidden="true"></span><b>Live results</b><span class="muted small" id="plTotal"></span></div>
+ <div class="pollbars mini">${opts.map((o,i)=>`<div class="pb ${o===mine?"mine":""}" style="--i:${i}"><div class="pb-top"><b>${esc(o)}${o===mine?' <span class="yours">your vote</span>':""}</b><span class="pb-n">0 · 0%</span></div><div class="pb-track"><i class="c${i%4}"><em class="pb-pct">0%</em></i></div></div>`).join("")}</div>
+ <p class="muted small" id="plState"></p><button class="outline" data-act="joinother">Join another code</button></div>`;
+ const paint=d=>{if(!d){stopTimers();const st=$("plState");if(st)st.textContent="The presenter has hidden the results.";return}
+  const tot=d.total||0,c=d.counts||{},max=Math.max(0,...opts.map(o=>c[o]||0));const t=$("plTotal");if(!t){stopTimers();return}t.textContent=`· ${tot} vote${tot===1?"":"s"}`;
+  [...box.querySelectorAll(".pb")].forEach((el,i)=>{const n=c[opts[i]]||0,p=tot?Math.round(100*n/tot):0;el.querySelector("i").style.width=Math.max(p,n?3:0)+"%";countTo(el,n,p);el.classList.toggle("lead",n===max&&n>0)});
+  const st=$("plState");if(st)st.textContent=d.open?"Updating live as people vote.":"Voting has closed. These are the final results."};
+ paint(r.data);stopTimers();every(2000,async()=>{const q=await db.rpc("get_poll_results",{join_code:P.code});if(!q.error)paint(q.data)});return true}
+
+/* ---------- v10: poll choices from a paste or a file (any number) ---------- */
+function pollChoices(text,isCsv){
+ const rows=isCsv?csvRows(String(text).replace(/\r/g,""),","):String(text).replace(/\r/g,"").split("\n").map(l=>l.split("\t"));
+ let prompt="";const opts=[],seen=new Set();
+ const clean=x=>String(x||"").replace(/^\s*(?:[-•*·▪●◦]\s*|\(?[A-Za-z]\)\s*|[A-Za-z][.)]\s+|\(?\d{1,3}[.)]\s+)/,"").replace(/\s+/g," ").trim();
+ rows.forEach((cells,ri)=>cells.forEach((raw,ci)=>{let v=String(raw||"").trim();if(!v)return;
+  const qm=v.match(/^(?:q(?:uestion)?|prompt|poll)\s*[:.-]\s*(.+)$/i);
+  if(qm){prompt=qm[1].trim();return}
+  if(!prompt&&!opts.length&&ci===0&&/\?\s*$/.test(v)){prompt=v.replace(/^\s*\d{1,3}[.)]\s*/,"");return}
+  if(/^(choices?|options?|opinions?|answers?)\s*:?$/i.test(v))return;
+  v=clean(v).slice(0,200);const k=v.toLowerCase();if(!v||seen.has(k))return;seen.add(k);opts.push(v)}));
+ return {prompt,opts}}
+ACT.polltemplate=()=>download("live_poll_template.csv","Question: Which skill do you find hardest?\nListening\nSpeaking\nReading\nWriting\nGrammar\nVocabulary\n");
+function pollCount(el){const n=pollChoices(el.value).opts.length,c=$("pollCount");if(c)c.innerHTML=`<b>${n} choice${n===1?"":"s"} ready.</b> Repeated lines are counted once.`};
+CHG.pollfile=async el=>{const file=el.files[0];try{const t=await readQuizFile(file);const r=pollChoices(t,/\.csv$/i.test(file.name));const f=el.closest("form");
+  if(!r.opts.length)throw new Error("No choices were found in that file. Put one choice per line, or download the template.");
+  f.options.value=r.opts.join("\n");if(r.prompt)f.prompt.value=r.prompt;if(!f.title.value)f.title.value=file.name.replace(/\.[^.]+$/,"").replace(/[_-]+/g," ");
+  pollCount(f.options);toast(`${r.opts.length} choice(s) loaded${r.prompt?" and the question":""}. Check them, then press Create and start.`)}catch(e){toast(e.message)}el.value=""};
+document.addEventListener("input",e=>{const el=e.target.closest("[data-inp=pollcount]");if(el)pollCount(el)});
+
+/* =====================================================================
+   v10 MODULE: sky mood (time of day + live weather), movable / hideable
+   Ask Coach button
+   ===================================================================== */
+const MOOD={key:"llc_mood",home:{lat:10.7905,lon:78.7047,label:"Tiruchirappalli"},w:null,t:null,
+ get(){try{return JSON.parse(localStorage.getItem(this.key)||"{}")}catch{return{}}},
+ set(o){const v={...this.get(),...o};try{localStorage.setItem(this.key,JSON.stringify(v))}catch{}return v}};
+const WX_NAME={clear:"Clear",cloud:"Cloudy",fog:"Misty",rain:"Rain",storm:"Thunderstorm"};
+const TOD_NAME={dawn:"Sunrise",day:"Day",dusk:"Sunset",night:"Night"};
+function wxKind(code){if(code==null)return "clear";if(code>=95)return "storm";if((code>=51&&code<=67)||(code>=80&&code<=82)||(code>=71&&code<=77)||code===85||code===86)return "rain";if(code===45||code===48)return "fog";if(code>=2)return "cloud";return "clear"}
+function todOf(w){const now=Date.now()/1000;
+ if(w&&w.sunrise&&w.sunset){const r=w.sunrise,s=w.sunset;if(now>=r-2400&&now<r+3600)return "dawn";if(now>=r+3600&&now<s-3600)return "day";if(now>=s-3600&&now<s+2400)return "dusk";return "night"}
+ const h=new Date().getHours()+new Date().getMinutes()/60;return h>=5.3&&h<7?"dawn":h>=7&&h<17.3?"day":h>=17.3&&h<19?"dusk":"night"}
+async function wxFetch(force){const st=MOOD.get(),loc=st.loc||MOOD.home;
+ try{const c=JSON.parse(localStorage.getItem("llc_wx")||"null");if(!force&&c&&c.lat===loc.lat&&c.lon===loc.lon&&Date.now()-c.at<15*60e3)return MOOD.w=c}catch{}
+ try{const u=`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=weather_code,is_day&daily=sunrise,sunset&forecast_days=1&timeformat=unixtime&timezone=auto`;
+  const j=await (await fetch(u)).json();const w={lat:loc.lat,lon:loc.lon,at:Date.now(),code:j.current?.weather_code,sunrise:j.daily?.sunrise?.[0],sunset:j.daily?.sunset?.[0]};
+  try{localStorage.setItem("llc_wx",JSON.stringify(w))}catch{}return MOOD.w=w}catch{return MOOD.w=MOOD.w||null}}
+/* a preview link such as ?mood=night-storm shows any mood */
+function moodPreview(){const m=(new URLSearchParams(location.search).get("mood")||"").toLowerCase().split("-");return TOD_NAME[m[0]]?{tod:m[0],wx:WX_NAME[m[1]]?m[1]:"clear"}:null}
+function moodApply(){const st=MOOD.get(),on=st.on!==false,b=document.body;
+ [...b.classList].filter(c=>/^(m-|w-)/.test(c)).forEach(c=>b.classList.remove(c));b.classList.toggle("mood-on",on);
+ const pv=moodPreview(),tod=pv?pv.tod:todOf(MOOD.w),wx=pv?pv.wx:wxKind(MOOD.w?.code);
+ if(on){b.classList.add("m-"+tod,"w-"+wx)}MOOD.now={tod,wx};moodSky();moodBtnPaint()}
+function moodSky(){const a=document.querySelector(".ambient-bg");if(!a||a.querySelector(".sky"))return;
+ a.insertAdjacentHTML("afterbegin",`<div class="sky"></div><div class="sky-tint"></div><div class="stars"></div><div class="orb"></div><div class="cloudband c1"></div><div class="cloudband c2"></div><div class="fogband"></div><div class="rainwrap"><div class="rain r1"></div><div class="rain r2"></div></div><div class="flash"></div>`)}
+const MOOD_IC={dawn:"🌅",day:"☀️",dusk:"🌇",night:"🌙",cloud:"⛅",fog:"🌫️",rain:"🌧️",storm:"⛈️"};
+function moodIcon(){const n=MOOD.now||{tod:todOf(null),wx:"clear"};if(MOOD.get().on===false)return "◐";return n.wx!=="clear"?(n.wx==="cloud"&&n.tod==="night"?"☁️":MOOD_IC[n.wx]):MOOD_IC[n.tod]}
+function moodBtnPaint(){const b=$("moodBtn");if(!b)return;b.textContent=moodIcon();const n=MOOD.now||{};b.setAttribute("aria-label",`Sky mood: ${MOOD.get().on===false?"off":`${TOD_NAME[n.tod]||""}, ${WX_NAME[n.wx]||""}`}. Open settings`);if(MOOD.open)moodPanel()}
+function moodMount(){if($("moodBtn"))return;const acc=document.querySelector("header .account");if(!acc)return;
+ const w=document.createElement("div");w.className="moodwrap";w.innerHTML=`<button id="moodBtn" type="button" class="moodbtn" aria-haspopup="true" aria-expanded="false"></button><div id="moodPanel" class="moodpanel" role="dialog" aria-label="Look and feel" hidden></div>`;
+ acc.insertBefore(w,acc.firstChild);
+ $("moodBtn").onclick=e=>{e.stopPropagation();MOOD.open=!MOOD.open;$("moodBtn").setAttribute("aria-expanded",MOOD.open);$("moodPanel").hidden=!MOOD.open;if(MOOD.open)moodPanel()};
+ document.addEventListener("click",e=>{if(MOOD.open&&!e.target.closest(".moodwrap")){MOOD.open=false;$("moodPanel").hidden=true;$("moodBtn").setAttribute("aria-expanded","false")}});
+ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&MOOD.open){MOOD.open=false;$("moodPanel").hidden=true}});
+ $("moodPanel").addEventListener("click",moodAct);moodBtnPaint()}
+function moodPanel(){const p=$("moodPanel");if(!p)return;const st=MOOD.get(),on=st.on!==false,n=MOOD.now||{},loc=st.loc||MOOD.home,cb=CB.get();
+ p.innerHTML=`<b class="mp-title">Look and feel</b>
+ <div class="mp-row"><div><b>Sky mood</b><span>The colours follow the time of day and the live weather.</span></div><button type="button" class="mswitch ${on?"on":""}" data-m="toggle" role="switch" aria-checked="${on}" aria-label="Sky mood"><i></i></button></div>
+ ${on?`<div class="mp-now">${moodIcon()} <b>${TOD_NAME[n.tod]||""}</b> · ${WX_NAME[n.wx]||"Clear"} <span>in ${esc(loc.label)}</span></div>
+ <button type="button" class="linklike" data-m="loc">${st.loc?"Update my location":"Use my location for the weather"}</button>${st.loc?' · <button type="button" class="linklike" data-m="home">Use Tiruchirappalli</button>':""}`:`<p class="muted small" style="margin:6px 0 0">Sky mood is off. The site uses its plain colours.</p>`}
+ <div class="mp-row"><div><b>Ask Coach button</b><span>${cb.hidden?"Hidden.":"Drag it anywhere on the screen."}</span></div><button type="button" class="mswitch ${cb.hidden?"":"on"}" data-m="coach" role="switch" aria-checked="${!cb.hidden}" aria-label="Show the Ask Coach button"><i></i></button></div>
+ ${!cb.hidden&&(cb.side||cb.y!=null)?'<button type="button" class="linklike" data-m="coachreset">Put it back in the corner</button>':""}
+ <p class="mp-src">Weather from Open-Meteo, updated every 15 minutes.</p>`}
+async function moodAct(e){const b=e.target.closest("[data-m]");if(!b)return;e.stopPropagation();const k=b.dataset.m;
+ if(k==="toggle"){MOOD.set({on:MOOD.get().on===false});moodApply();toast(MOOD.get().on===false?"Sky mood off.":"Sky mood on.")}
+ if(k==="loc"){if(!navigator.geolocation)return toast("This browser cannot share a location.");toast("Allow location to get your local weather…");
+  navigator.geolocation.getCurrentPosition(async p=>{MOOD.set({loc:{lat:+p.coords.latitude.toFixed(2),lon:+p.coords.longitude.toFixed(2),label:"your area"}});await wxFetch(true);moodApply();toast("Weather now follows your area.")},()=>toast("Location was not shared. Using Tiruchirappalli."),{timeout:10000,maximumAge:3600e3})}
+ if(k==="home"){MOOD.set({loc:null});await wxFetch(true);moodApply()}
+ if(k==="coach"){const h=!CB.get().hidden;CB.set({hidden:h});cbApply();if(h)toast(`Ask Coach hidden. Bring it back from the ${moodIcon()} button at the top.`)}
+ if(k==="coachreset"){CB.set({side:null,y:null});cbApply()}
+ moodPanel()}
+async function moodStart(){moodSky();moodApply();moodMount();await wxFetch();moodApply();
+ setInterval(moodApply,60e3);setInterval(async()=>{if(!document.hidden){await wxFetch();moodApply()}},15*60e3);
+ document.addEventListener("visibilitychange",async()=>{if(!document.hidden){await wxFetch();moodApply()}})}
+
+/* ---------- Ask Coach: drag it anywhere, snap to the nearest side, or hide it ---------- */
+const CB={key:"llc_coach",get(){try{return JSON.parse(localStorage.getItem(this.key)||"{}")}catch{return{}}},set(o){const v={...this.get(),...o};try{localStorage.setItem(this.key,JSON.stringify(v))}catch{}return v}};
+function cbApply(){const w=$("chatbotWidget");if(!w)return;const c=CB.get();w.classList.toggle("cb-hidden",!!c.hidden);
+ if(c.hidden){const p=$("chatbotPanel");if(p?.classList.contains("is-open"))$("chatbotClose")?.click()}
+ if(c.side&&c.y!=null){const h=w.querySelector(".chatbot-toggle-wrap")?.offsetHeight||52,m=innerWidth<=600?12:22,top=Math.min(innerHeight-h-m,Math.max(70,c.y*innerHeight));
+  w.style.top=top+"px";w.style.bottom="auto";w.style.left=c.side==="l"?m+"px":"auto";w.style.right=c.side==="r"?m+"px":"auto";w.classList.toggle("at-left",c.side==="l");w.classList.toggle("at-top",top<innerHeight/2)}
+ else{w.style.top=w.style.left=w.style.right=w.style.bottom="";w.classList.remove("at-left","at-top")}}
+function cbStart(){const w=$("chatbotWidget"),wrap=w?.querySelector(".chatbot-toggle-wrap"),btn=$("chatbotToggle");if(!w||!wrap||!btn||wrap.dataset.drag)return;wrap.dataset.drag=1;
+ const x=document.createElement("button");x.type="button";x.className="cb-hide";x.setAttribute("aria-label","Hide the Ask Coach button");x.textContent="×";wrap.appendChild(x);
+ x.addEventListener("click",e=>{e.stopPropagation();CB.set({hidden:true});cbApply();toast(`Ask Coach hidden. Bring it back from the ${moodIcon()} button at the top.`)});
+ let d=null,moved=false;
+ btn.addEventListener("pointerdown",e=>{if(e.button!==0)return;const r=w.getBoundingClientRect();d={x:e.clientX,y:e.clientY,l:r.left,t:r.top,id:e.pointerId};moved=false});
+ addEventListener("pointermove",e=>{if(!d||e.pointerId!==d.id)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;
+  if(!moved&&Math.hypot(dx,dy)<8)return;if(!moved){moved=true;try{btn.setPointerCapture(d.id)}catch{}w.classList.add("cb-drag");if($("chatbotPanel").classList.contains("is-open"))$("chatbotClose").click()}
+  const r=w.getBoundingClientRect();w.style.left=Math.min(innerWidth-r.width-4,Math.max(4,d.l+dx))+"px";w.style.top=Math.min(innerHeight-r.height-4,Math.max(4,d.t+dy))+"px";w.style.right=w.style.bottom="auto"});
+ const end=e=>{if(!d)return;if(moved){const r=w.getBoundingClientRect();CB.set({side:r.left+r.width/2<innerWidth/2?"l":"r",y:r.top/innerHeight});w.classList.remove("cb-drag");w._dragEnd=Date.now();cbApply();setTimeout(()=>{moved=false},400)}d=null};
+ addEventListener("pointerup",end);addEventListener("pointercancel",end);
+ btn.addEventListener("click",e=>{if(moved||Date.now()-(w._dragEnd||0)<350){e.stopImmediatePropagation();e.preventDefault();moved=false}},true);
+ /* on phones the open chat fills the screen, so the round button steps aside */
+ new MutationObserver(()=>w.classList.toggle("cb-open",$("chatbotPanel").classList.contains("is-open"))).observe($("chatbotPanel"),{attributes:true,attributeFilter:["class"]});
+ addEventListener("resize",cbApply);cbApply()}
+(function(){const go=()=>{try{moodStart()}catch(e){console.warn(e)}try{cbStart()}catch(e){console.warn(e)}};document.readyState==="loading"?document.addEventListener("DOMContentLoaded",go):go()})();
+/* phones: when signed in, "Sign out" lives in the menu so the site name fits */
+(function(){const go=()=>{const h=document.querySelector("header"),a=$("authBtn"),n=$("nav");if(!h||!a||!n)return;
+ const mq=matchMedia("(max-width:600px)");const sync=()=>{const inn=/out/i.test(a.textContent);h.classList.toggle("signed-in",inn);let s=n.querySelector(".nav-signout");
+  if(inn&&!mq.matches){s?.remove();return}
+  if(inn&&!s){s=document.createElement("button");s.type="button";s.className="nav-signout";s.textContent="Sign out";s.onclick=()=>a.click();n.appendChild(s)}else if(!inn&&s)s.remove()};
+ new MutationObserver(sync).observe(a,{childList:true,characterData:true,subtree:true});new MutationObserver(()=>{if(!n.querySelector(".nav-signout"))sync()}).observe(n,{childList:true});mq.addEventListener?.("change",sync);sync()};
+ document.readyState==="loading"?document.addEventListener("DOMContentLoaded",go):go()})();
 
 (async function init(){
  if(!db){$("app").innerHTML='<div class="notice">Could not load the Supabase library. Check your internet connection.</div>';return}
