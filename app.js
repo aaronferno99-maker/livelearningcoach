@@ -906,21 +906,29 @@ function itemRow(it,locked,anx){
  else if(done&&!learn)right=`<span class="chip c-Completed">Completed${isTest&&last?.total?` · ${last.score}/${last.total}`:""}</span>`;
  else right=`${done&&last?`<span class="chip c-Completed">${last.score}/${last.total}</span>`:""}<button class="${done?"soft":"primary"}" data-act="rstart" data-id="${a.id}" data-ctx="${it.ctx}">${open?"Continue":done?"Try again":"Start"}</button>`;
  return `<div class="activity"><div class="badge">${a.segment||a.skill||KIND[a.kind]}</div><div class="info"><b>${esc(a.title)}</b><div class="muted small">${a.n} ${a.kind==="questionnaire"?"statements":"questions"}${learn&&anx?" · short feelings check first":""}</div></div>${right}</div>`}
+function journeyModel(st){
+ const I=stepInfo(st),frac=s=>s.items.length?s.items.filter(it=>doneOf(it.a,it.ctx)).length/s.items.length:0;
+ const list=[{k:"process",n:"How it works",done:I.read,lock:null,f:I.read?1:0,cnt:""},{k:"consent",n:"Consent",done:I.consent,lock:I.read?null:"Read how the research works first.",f:I.consent?1:0,cnt:""},
+  ...I.steps.map(s=>{const t=s.items.length,d=s.items.filter(it=>doneOf(it.a,it.ctx)).length;return {...s,done:t>0&&d===t,f:frac(s),cnt:t?`${d}/${t}`:"",empty:!t}})];
+ const cur=list.findIndex(x=>!x.done);return {I,list,cur:cur<0?list.length-1:cur,pct:Math.round(100*list.reduce((a,x)=>a+x.f,0)/list.length),all:cur<0}}
 async function researchHome(){
  const r=R();
  if(r.view==="process")return processPage();
  if(r.view==="run")return RUN.page();
- const [st,banner]=await Promise.all([loadState(),liveBanner()]);const I=stepInfo(st);
- const stepCard=(s,i)=>{const locked=!!s.lock;
-  return `<div class="jstep ${s.done?"is-done":locked?"is-locked":"is-open"}"><div class="jnum">${s.done?"✓":i+3}</div><div class="jbody"><div class="row"><h3>${s.n}</h3>${s.done?'<span class="chip c-Completed">Done</span>':locked?'<span class="chip c-Locked">Locked</span>':'<span class="chip c-Available">Open</span>'}</div><p class="muted small">${s.d}</p>
-  ${locked?`<p class="lockmsg">🔒 ${s.lock}</p>`:""}${s.items.length?`<div class="stack">${s.items.map(it=>itemRow(it,locked,I.anx)).join("")}</div>`:(!locked?'<p class="muted small">Nothing has been added here yet.</p>':"")}</div></div>`};
+ const [st,banner]=await Promise.all([loadState(),liveBanner()]);const M=journeyModel(st),I=M.I,L=M.list;
+ const sel=L.some(x=>x.k===r.sel)?r.sel:L[M.cur].k,S_=L.find(x=>x.k===sel),si=L.indexOf(S_);
+ /* live: refresh when a teacher opens a stage or new work is published */
+ stopTimers();const snap=JSON.stringify(st);S.after=()=>every(20000,async()=>{if(S.page!=="app"||S.tab!=="dash"||S.r?.view)return;try{const n=await db.rpc("research_state");if(!n.error&&JSON.stringify(n.data)!==snap)render()}catch{}});
+ const tile=(x,i)=>{const state=x.done?"is-done":x.lock?"is-locked":"is-open";
+  return `<button type="button" class="ptile ${state} ${i===M.cur&&!M.all?"is-cur":""} ${x.k===sel?"is-sel":""}" data-act="jsel" data-k="${x.k}" aria-pressed="${x.k===sel}"><span class="pconn"><i style="width:${Math.round(100*x.f)}%"></i></span><span class="pnode">${x.done?"✓":x.lock?"🔒":i+1}</span><b>${x.n}</b><span class="pstat">${x.done?"Done":x.lock?"Locked":x.empty?"Coming soon":"Open"}${x.cnt?` · ${x.cnt}`:""}</span></button>`};
+ let detail="";
+ if(sel==="process")detail=`<p class="muted">See what will happen, step by step, before you agree to take part.</p><button class="${I.read?"soft":"primary"}" data-act="rview" data-v="process">${I.read?"Read again":"See how it works"}</button>`;
+ else if(sel==="consent")detail=I.consent?`<p class="muted">You agreed to take part on ${fmtDT(st.progress.consent_at)}. You can withdraw at any time by telling the researcher.</p>`:I.read?`<form data-form="consent" class="stack"><label class="check"><input type="checkbox" name="agree" required> <span>I have read how the research works. I understand that taking part is voluntary, that my scores and answers will be used for research with my name removed, and that I can stop at any time. I agree to take part.</span></label><button class="primary">I agree, continue</button></form>`:'<p class="lockmsg">🔒 Read how the research works first.</p>';
+ else detail=`<p class="muted">${S_.d}</p>${S_.lock?`<p class="lockmsg">🔒 ${S_.lock}</p>`:""}${S_.items.length?`<div class="stack">${S_.items.map(it=>itemRow(it,!!S_.lock,I.anx)).join("")}</div>`:'<p class="muted small">Your teacher has not added anything here yet.</p>'}`;
  return `${banner}<div class="head"><div class="eyebrow">${esc(sp?.verified?"Research ID "+sp.research_id:"Research participant")}</div><h1>Hello, ${esc((profile.full_name||"").split(" ")[0])}</h1><p>Your research journey. Complete the steps in order.</p></div>
- <div class="journey">
-  <div class="jstep ${I.read?"is-done":"is-open"}"><div class="jnum">${I.read?"✓":1}</div><div class="jbody"><div class="row"><h3>How this research works</h3>${I.read?'<span class="chip c-Completed">Read</span>':""}</div><p class="muted small">See what will happen, step by step, before you agree to take part.</p><button class="${I.read?"soft":"primary"}" data-act="rview" data-v="process">${I.read?"Read again":"See how it works"}</button></div></div>
-  <div class="jstep ${I.consent?"is-done":I.read?"is-open":"is-locked"}"><div class="jnum">${I.consent?"✓":2}</div><div class="jbody"><div class="row"><h3>Consent</h3>${I.consent?'<span class="chip c-Completed">Given</span>':""}</div>
-   ${I.consent?`<p class="muted small">You agreed to take part on ${fmtDT(st.progress.consent_at)}. You can withdraw at any time by telling the researcher.</p>`:I.read?`<form data-form="consent" class="stack"><label class="check"><input type="checkbox" name="agree" required> <span>I have read how the research works. I understand that taking part is voluntary, that my scores and answers will be used for research with my name removed, and that I can stop at any time. I agree to take part.</span></label><button class="primary">I agree, continue</button></form>`:'<p class="lockmsg">🔒 Read how the research works first.</p>'}</div></div>
-  ${I.steps.map(stepCard).join("")}
- </div>`}
+ <div class="card pcard"><div class="row"><b>${M.all?"All steps complete 🎉":`Step ${M.cur+1} of ${L.length}: ${L[M.cur].n}`}</b><span class="ppct">${M.pct}%</span></div><div class="bar pbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${M.pct}" aria-label="Research progress"><i style="width:${M.pct}%"></i></div>
+ <div class="pgrid">${L.map(tile).join("")}</div></div>
+ <div class="card jdetail"><div class="row"><h3><span class="jd-num">${si+1}</span> ${sel==="process"?"How this research works":S_.n}</h3>${S_.done?'<span class="chip c-Completed">Done</span>':S_.lock?'<span class="chip c-Locked">Locked</span>':'<span class="chip c-Available">Open</span>'}</div>${detail}</div>`}
 function processPage(){
  const st=S.rs,read=!!st?.progress?.process_read_at;
  const steps=[["Read and agree","You read this page and tick the consent box. Taking part is your choice."],["Questionnaire","A short questionnaire about how you feel when you use English. You answer on a five-point scale from Strongly disagree to Strongly agree."],
@@ -969,12 +977,13 @@ const RUN={st:null,
   if(/\.(png|jpe?g|gif|webp)(\?|$)/i.test(u))return `<img src="${esc(u)}" alt="" class="media-img">`;
   return `<a class="soft linkbtn" href="${esc(u)}" target="_blank" rel="noopener">Open the ${esc((a.segment||"material").toLowerCase())} ↗</a>`},
  qbody(q,i,given,locked){
+  const say=q.say?`<div class="saybar"><button type="button" class="soft" data-act="say">▶ Play audio</button><span class="muted small">Listen, then answer. You can play it again.</span></div>`:"";
   const tiles=(opts)=>`<div class="tiles t${opts.length}">${opts.map((o,oi)=>`<button type="button" class="tile c${oi%4}${given===oi?" picked":""}" ${locked?"disabled":""} data-act="pick" data-v="${oi}"><span>${"ABCD"[oi]||""}</span>${esc(o)}</button>`).join("")}</div>`;
-  if(q.type==="tf")return `<div class="qtext">${esc(q.q)}</div>${tiles(["True","False"])}`;
-  if(q.type==="ar")return `<div class="qtext"><div class="ar"><b>Assertion (A)</b> ${esc(q.assertion)}</div><div class="ar"><b>Reason (R)</b> ${esc(q.reason)}</div></div>${tiles(AR_OPTS)}`;
+  if(q.type==="tf")return `${say}<div class="qtext">${esc(q.q)}</div>${tiles(["True","False"])}`;
+  if(q.type==="ar")return `${say}<div class="qtext"><div class="ar"><b>Assertion (A)</b> ${esc(q.assertion)}</div><div class="ar"><b>Reason (R)</b> ${esc(q.reason)}</div></div>${tiles(AR_OPTS)}`;
   if(q.type==="match"){const g=Array.isArray(given)?given:[];
-   return `<div class="qtext">${esc(q.q||"Match each item with its pair.")}</div><div class="match">${q.left.map((l,li)=>`<div class="mrow"><span>${esc(l)}</span><select data-chg="pickmatch" data-li="${li}" ${locked?"disabled":""}><option value="">Choose…</option>${q.right.map((r,ri)=>`<option value="${ri}" ${g[li]===ri?"selected":""}>${esc(r)}</option>`).join("")}</select></div>`).join("")}</div>${locked?"":`<button type="button" class="primary" data-act="lockmatch">${RUN.st?.learn?"Check answer":"Save answer"}</button>`}`}
-  return `<div class="qtext">${esc(q.q)}</div>${tiles(q.options||[])}`},
+   return `${say}<div class="qtext">${esc(q.q||"Match each item with its pair.")}</div><div class="match">${q.left.map((l,li)=>`<div class="mrow"><span>${esc(l)}</span><select data-chg="pickmatch" data-li="${li}" ${locked?"disabled":""}><option value="">Choose…</option>${q.right.map((r,ri)=>`<option value="${ri}" ${g[li]===ri?"selected":""}>${esc(r)}</option>`).join("")}</select></div>`).join("")}</div>${locked?"":`<button type="button" class="primary" data-act="lockmatch">${RUN.st?.learn?"Check answer":"Save answer"}</button>`}`}
+  return `${say}<div class="qtext">${esc(q.q)}</div>${tiles(q.options||[])}`},
  ansText(q,k){if(q.type==="tf")return ["True","False"][k];if(q.type==="ar")return "ABCD"[k]+". "+AR_OPTS[k];if(q.type==="match")return q.left.map((l,i)=>`${l} → ${q.right[k[i]]}`).join("; ");return q.options?.[k]},
  quiz(){const s=RUN.st,a=s.act,n=a.questions.length,i=s.i,q=a.questions[i],given=s.ans[i],fb=s.fb[i],answered=Object.keys(s.ans).filter(k=>s.ans[k]!=null&&!(Array.isArray(s.ans[k])&&s.ans[k].some(x=>x==null))).length;
   const lockedQ=s.learn&&!!fb;
@@ -1003,12 +1012,14 @@ Object.assign(FORM,{
   setR({})}});
 Object.assign(ACT,{
  back(){history.back()},
+ jsel(el){R().sel=el.dataset.k;render()},
+ say(){const q=RUN.st?.act?.questions[RUN.st.i];if(!q?.say||!window.speechSynthesis)return toast("Audio is not supported in this browser.");const u=new SpeechSynthesisUtterance(q.say);u.lang="en-IN";u.rate=.9;speechSynthesis.cancel();speechSynthesis.speak(u)},
  rview(el){stopTimers();if(el.dataset.v==="")RUN.st=null;setR(el.dataset.v?{view:el.dataset.v}:{})},
  async rack(){await rpc("research_ack",{p_step:"process"});await loadState();toast("Thank you. Now tick the consent box.");setR({})},
  async rstart(el){const st=S.rs||await loadState();const a=st.activities.find(x=>x.id===el.dataset.id);if(a)await RUN.begin(a,el.dataset.ctx||"")},
  async pick(el){const s=RUN.st;if(!s||s.phase!=="q")return;const v=+el.dataset.v;await RUN_answer(v)},
  async lockmatch(){const s=RUN.st,q=s.act.questions[s.i],g=s.ans[s.i]||[];if(g.length<q.left.length||g.some(x=>x==null||x===""))return toast("Match every item first.");await RUN_answer(g,true)},
- qnext(){const s=RUN.st;if(s.i<s.act.questions.length-1){s.i++;s.resumed=false;render();window.scrollTo(0,0)}},
+ qnext(){try{speechSynthesis.cancel()}catch{};const s=RUN.st;if(s.i<s.act.questions.length-1){s.i++;s.resumed=false;render();window.scrollTo(0,0)}},
  qprev(){const s=RUN.st;if(s.i>0){s.i--;render()}},
  qgo(el){RUN.st.i=+el.dataset.i;render()},
  async qfinish(){const s=RUN.st,a=s.act,n=a.questions.length;
@@ -1067,14 +1078,14 @@ function shuffleIdx(n){const a=[...Array(n).keys()];for(let i=n-1;i>0;i--){const
 /* turn the form / an import line into {q (student view), k (hidden key)} */
 function buildQ(f){const t=f.type,ex=(f.explanation||"").trim()||undefined,sk=f.skill||undefined;const need=(v,m)=>{if(!String(v||"").trim())throw new Error(m);return String(v).trim()};
  if(t==="likert")return {q:{type:"likert",q:need(f.q,"Type the statement."),...(f.reverse?{reverse:true}:{})},k:{}};
- if(t==="tf"){if(!["0","1",0,1].includes(f.answer))throw new Error("Choose True or False as the answer.");return {q:{type:"tf",q:need(f.q,"Type the statement."),skill:sk},k:{answer:+f.answer,explanation:ex}}}
- if(t==="ar"){if(f.answer===""||f.answer==null)throw new Error("Choose the correct option.");return {q:{type:"ar",assertion:need(f.assertion,"Type the assertion."),reason:need(f.reason,"Type the reason."),skill:sk},k:{answer:+f.answer,explanation:ex}}}
+ if(t==="tf"){if(!["0","1",0,1].includes(f.answer))throw new Error("Choose True or False as the answer.");return {q:{type:"tf",q:need(f.q,"Type the statement."),skill:sk,say:sy},k:{answer:+f.answer,explanation:ex}}}
+ if(t==="ar"){if(f.answer===""||f.answer==null)throw new Error("Choose the correct option.");return {q:{type:"ar",assertion:need(f.assertion,"Type the assertion."),reason:need(f.reason,"Type the reason."),skill:sk,say:sy},k:{answer:+f.answer,explanation:ex}}}
  if(t==="match"){const pairs=String(f.pairs||"").split(/\n|;/).map(l=>l.trim()).filter(Boolean).map(l=>l.split(/\s*=\s*/));if(pairs.length<2||pairs.some(p=>p.length!==2||!p[0]||!p[1]))throw new Error("Write at least two pairs, one per line, as  left = right");
-  const sh=shuffleIdx(pairs.length);return {q:{type:"match",q:(f.q||"").trim()||"Match the following.",left:pairs.map(p=>p[0]),right:sh.map(i=>pairs[i][1]),skill:sk},k:{answer:pairs.map((_,i)=>sh.indexOf(i)),explanation:ex}}}
+  const sh=shuffleIdx(pairs.length);return {q:{type:"match",q:(f.q||"").trim()||"Match the following.",left:pairs.map(p=>p[0]),right:sh.map(i=>pairs[i][1]),skill:sk,say:sy},k:{answer:pairs.map((_,i)=>sh.indexOf(i)),explanation:ex}}}
  const opts=[f.o0,f.o1,f.o2,f.o3].map(o=>String(o||"").trim());const used=opts.filter(Boolean);if(used.length<2)throw new Error("Give at least two options.");
  const ai=+f.answer;if(f.answer===""||f.answer==null||!opts[ai])throw new Error("Choose which option is correct.");
- return {q:{type:"mcq",q:need(f.q,"Type the question."),options:used,skill:sk},k:{answer:used.indexOf(opts[ai]),explanation:ex}}}
-function qToForm(q,k){if(q.type==="likert")return {type:"likert",q:q.q,reverse:!!q.reverse};const b={type:q.type,explanation:k.explanation||"",skill:q.skill||""};
+ return {q:{type:"mcq",q:need(f.q,"Type the question."),options:used,skill:sk,say:sy},k:{answer:used.indexOf(opts[ai]),explanation:ex}}}
+function qToForm(q,k){if(q.type==="likert")return {type:"likert",q:q.q,reverse:!!q.reverse};const b={type:q.type,explanation:k.explanation||"",skill:q.skill||"",say:q.say||""};
  if(q.type==="tf")return {...b,q:q.q,answer:String(k.answer)};if(q.type==="ar")return {...b,assertion:q.assertion,reason:q.reason,answer:String(k.answer)};
  if(q.type==="match")return {...b,q:q.q,pairs:q.left.map((l,i)=>`${l} = ${q.right[k.answer[i]]}`).join("\n")};
  return {...b,q:q.q,o0:q.options[0]||"",o1:q.options[1]||"",o2:q.options[2]||"",o3:q.options[3]||"",answer:String(k.answer)}}
@@ -1127,7 +1138,7 @@ function editorPage(){
  const qform=isF?"":`<form data-form="edq" class="card stack"><div class="row"><h3>${ED.qi!=null?`Edit question ${ED.qi+1}`:isQ?"Add a statement":"Add a question"}</h3>${lock?'<span class="chip c-Locked">Locked</span>':""}</div>
   ${lock?'<div class="notice">Students have already taken this activity, so its questions cannot be changed. Use <b>Duplicate</b> in My library to make a new version.</div>':`
   ${isQ?'<input type="hidden" name="type" value="likert">':`<label>Question type<select name="type" data-chg="qtype">${["mcq","tf","ar","match"].map(t=>`<option value="${t}" ${f.type===t?"selected":""}>${typeName[t]}</option>`).join("")}</select></label>`}
-  ${qfields}${isQ?"":`<label>Explanation (shown to students after a wrong answer in interventions and practice)<textarea name="explanation" rows="2">${esc(f.explanation||"")}</textarea></label>${d.purpose==="posttest"?`<label>Skill this question tests${skillSel("skill",f.skill)}</label>`:""}`}
+  ${qfields}${isQ?"":`<label>Explanation (shown to students after a wrong answer in interventions and practice)<textarea name="explanation" rows="2">${esc(f.explanation||"")}</textarea></label><label>Audio script (optional): the website reads this aloud when the student presses Play audio. Use it for listening questions.<textarea name="say" rows="2">${esc(f.say||"")}</textarea></label>${d.purpose==="posttest"?`<label>Skill this question tests${skillSel("skill",f.skill)}</label>`:""}`}
   <div class="actions"><button class="primary">${ED.qi!=null?"Update question":"Add to list"}</button>${ED.qi!=null?'<button type="button" class="outline" data-act="edqcancel">Cancel</button>':""}</div>`}</form>
   ${lock?"":`<details class="card"><summary>Import many ${isQ?"statements":"questions"} at once</summary><form data-form="edimport" class="stack" style="margin-top:12px"><p class="muted small">${isQ?"One statement per line. Add <code>| R</code> at the end of positively worded statements that must be reverse-scored.":"One question per line, parts separated by <code>|</code>:<br><code>MCQ | question | A | B | C | D | answer letter | explanation</code><br><code>TF | statement | T or F | explanation</code><br><code>AR | assertion | reason | answer letter | explanation</code><br><code>MATCH | instruction | left=right; left=right | explanation</code>"}</p>
   <textarea name="txt" id="edImportTxt" rows="8"></textarea><label>Or choose a text or CSV file in this format<input type="file" accept=".txt,.csv,text/plain" data-chg="edfile"></label><button class="soft">Import</button></form></details>`}`;

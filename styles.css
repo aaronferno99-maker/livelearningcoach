@@ -313,3 +313,21 @@ button,a{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 @media(max-width:900px){.readwrap,.edwrap{grid-template-columns:1fr}.passage-pane{position:static;max-height:46vh}.qlist{position:static;max-height:none}.createbar{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.tiles{grid-template-columns:1fr}.tiles.t2{grid-template-columns:1fr 1fr}.jstep{grid-template-columns:34px 1fr;gap:10px;padding:14px}.jnum{width:34px;height:34px;font-size:14px}.likert-opts span{width:38px;height:38px}.likert-opts em{font-size:9.5px}.statrow{grid-template-columns:1fr 1fr 1fr;gap:8px}.statrow .stat b{font-size:22px}.activity{flex-wrap:wrap}.msg{max-width:94%}.lg-stage{padding:18px;border-radius:18px}.flash{height:250px}.flash-f,.flash-b{font-size:21px}.stage-row{flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){.flash-in,.tile,.namecloud span,.board li,.lg-wait span,.confetti i{animation:none!important;transition:none!important}.confetti{display:none}}
+
+/* v6.1: progress grid on the student research page */
+.pcard{display:grid;gap:14px}.ppct{font:800 20px Manrope;color:var(--purple)}.pbar{height:12px}.pbar i{transition:width .8s ease}
+.pgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:0;row-gap:16px}
+.ptile{position:relative;display:grid;justify-items:center;gap:6px;background:transparent;padding:0 4px 10px;border-radius:14px;color:var(--ink);text-align:center;font-weight:500}
+.pconn{position:absolute;top:19px;left:50%;width:100%;height:6px;background:#e3e5ef;z-index:0}.pconn i{display:block;height:100%;background:linear-gradient(90deg,#7568e8,#17b2a4);transition:width .8s ease}
+.pgrid .ptile:last-child .pconn{display:none}
+.pnode{position:relative;z-index:1;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:800 16px Manrope;background:white;border:3px solid #d5d8e6;color:#8a93a8;transition:.3s}
+.ptile.is-open .pnode{border-color:var(--purple);color:var(--purple)}.ptile.is-done .pnode{background:#13a99b;border-color:#13a99b;color:white}.ptile.is-locked .pnode{font-size:14px}
+.ptile.is-cur .pnode{box-shadow:0 0 0 0 rgba(101,88,211,.5);animation:pnode 1.8s infinite}.ptile.is-sel{background:var(--lav)}.ptile.is-sel .pnode{transform:scale(1.08)}
+.ptile b{font:800 13px/1.25 Manrope}.pstat{font-size:11px;color:var(--muted);font-weight:700}.ptile.is-done .pstat{color:#16816e}.ptile.is-open .pstat{color:var(--purple)}
+.ptile:hover{background:#f3f2ff}.ptile:focus-visible{outline:3px solid #b9b1ff}
+.jdetail h3{margin:0;font:800 19px Manrope;display:flex;align-items:center;gap:10px}.jd-num{width:30px;height:30px;border-radius:50%;background:var(--purple);color:white;display:grid;place-items:center;font-size:13px}.jdetail{display:grid;gap:10px;margin-top:14px}
+.saybar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+@keyframes pnode{70%{box-shadow:0 0 0 10px rgba(101,88,211,0)}100%{box-shadow:0 0 0 0 rgba(101,88,211,0)}}
+@media(max-width:900px){.pgrid{grid-template-columns:repeat(4,1fr)}.pgrid .ptile:nth-child(4n) .pconn{display:none}}
+@media(max-width:560px){.pgrid{grid-template-columns:repeat(2,1fr)}.pgrid .ptile:nth-child(4n) .pconn{display:block}.pgrid .ptile:nth-child(2n) .pconn{display:none}.ptile{padding:8px 4px 10px}.pconn{top:27px}}
+@media(prefers-reduced-motion:reduce){.ptile.is-cur .pnode{animation:none}.pbar i,.pconn i{transition:none}}
