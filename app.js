@@ -317,9 +317,12 @@ const newPassPage=()=>`<div class="card auth-card stack" style="max-width:460px;
 function registerPage(){
  const f=(n,l,t="text",x="")=>`<label>${l}<input name="${n}" type="${t}" ${x}></label>`;
  return `<div class="card stack" style="max-width:720px;margin:30px auto"><h2>Student registration</h2><form data-form="register" class="stack">
- <div class="form-grid">${f("full_name","Full name","text",'required data-pwsrc="1"')}${f("student_no","Student ID number","text","required")}${f("mobile","Mobile number (10 digits)","tel",'required pattern="[6-9][0-9]{9}"')}${f("email","Email address","email","required")}${f("birth_year","Year of birth","number",'required min="1980" max="2012" data-pwsrc="1" placeholder="e.g. 2005"')}${f("place","Place / district","text","required")}
+ <div class="form-grid">${f("full_name","Full name","text",'required data-pwsrc="1"')}${f("student_no","Student ID number","text","required")}${f("mobile","Mobile number (10 digits)","tel",'required pattern="[6-9][0-9]{9}"')}${f("email","Email address","email","required")}${f("birth_year","Year of birth","number",'required min="1980" max="2012" data-pwsrc="1" placeholder="e.g. 2005"')}${f("place","Native place / district","text","required")}
  <label>Gender<select name="gender" required><option value="">Select</option><option>Female</option><option>Male</option><option>Other</option><option>Prefer not to say</option></select></label>
- <label>UG classification<select name="year" required><option value="">Select</option><option value="1">Year I</option><option value="2">Year II</option><option value="3">Year III</option></select></label>
+ ${f("subject","Subject / stream (e.g. Tamil, English)","text","required")}
+ <label>Study level<select name="study_level" required data-chg="studylevel"><option value="">Select</option><option value="UG">Undergraduate (UG)</option><option value="PG">Postgraduate (PG)</option></select></label>
+ <label>Year<select name="year" required><option value="">Select</option><option value="1">I Year</option><option value="2">II Year</option><option value="3">III Year</option></select></label>
+ <label>Rural / Urban<select name="locality" required><option value="">Select</option><option value="Rural">Rural</option><option value="Urban">Urban</option></select></label>
  ${f("college","College / Department","text","required")}</div>
  <div class="pwbox"><div><div class="eyebrow">YOUR PASSWORD</div><output id="pwOut" class="pwout">Type your full name and year of birth</output><p class="muted small">Your password is your <b>last name</b> followed by your <b>year of birth</b>, for example <b>Aaron1999</b>. Write it down. You can change it later under Profile.</p></div><input type="hidden" name="password" id="pwVal"></div>
  <label class="check"><input type="checkbox" name="consent_research" required> I have read the study information and give informed consent to take part in this research.</label>
@@ -339,7 +342,7 @@ const FORM={
   await loadUser();if(role()!==want){await db.auth.signOut();user=null;profile=null;sp=null;buildNav();return toast("This email has not been invited for this portal. Ask the researcher to invite it, then try again.")}
   go("app",homeTab());toast("Welcome!")},
  async register(f,d){
-  const meta={};["full_name","student_no","mobile","birth_year","place","gender","year","college"].forEach(k=>meta[k]=String(d.get(k)||"").trim());
+  const meta={};["full_name","student_no","mobile","birth_year","place","gender","year","college","subject","study_level","locality"].forEach(k=>meta[k]=String(d.get(k)||"").trim());
   const by=+meta.birth_year,pw=genPassword(meta.full_name,by);if(!(by>=1980&&by<=2012))return toast("Enter your year of birth, e.g. 2005.");if(!pw)return toast("Type your full name in English letters.");
   meta.age=String(new Date().getFullYear()-by);d.set("password",pw);
   meta.consent_research=!!d.get("consent_research");meta.consent_email=!!d.get("consent_email");meta.consent_whatsapp=!!d.get("consent_whatsapp");
@@ -839,9 +842,12 @@ const ACT={
  present(el){S.present=el.dataset.id;render()},
  back(){S.present=null;if(channel){db.removeChannel(channel);channel=null}render()},
  async pause(el){await ok(db.from("sessions").update({is_open:el.dataset.open==="1"}).eq("id",el.dataset.id));render()},
- async csv(el){const s=await ok(db.from("sessions").select("title,code").eq("id",el.dataset.id).single());const d=await ok(db.from("responses").select("participant_name,answer,is_anonymous,created_at").eq("session_id",el.dataset.id));download(`${s.title}_${s.code}.csv`,[csvLine(["Participant","Answer","Anonymous","Submitted"]),...d.map(r=>csvLine([r.participant_name||"Anonymous",r.answer,r.is_anonymous?"Yes":"No",r.created_at]))].join("\n"))},
+ async csv(el){const s=await ok(db.from("sessions").select("title,code,collect_profile,ask_confidence").eq("id",el.dataset.id).single());const d=await ok(db.from("responses").select("participant_name,answer,is_anonymous,created_at,g_subject,g_study_level,g_year,g_locality,g_gender,g_native,g_consent,confidence").eq("session_id",el.dataset.id));
+  const base=["Participant","Answer","Anonymous","Submitted"],prof=s.collect_profile?["Subject","Study level","Year","Rural/Urban","Gender","Native","Consent"]:[],conf=s.ask_confidence?["Confidence (1-10)"]:[];
+  download(`${s.title}_${s.code}.csv`,[csvLine([...base,...prof,...conf]),...d.map(r=>csvLine([r.participant_name||"Anonymous",r.answer,r.is_anonymous?"Yes":"No",r.created_at,...(s.collect_profile?[r.g_subject||"",r.g_study_level||"",r.g_year||"",r.g_locality||"",r.g_gender||"",r.g_native||"",r.g_consent?"Yes":"No"]:[]),...(s.ask_confidence?[r.confidence??""]:[])]))].join("\n"))},
 };
-const CHG={unlockStu(el){S.unlockStu=el.value;render()},async assign(el){await ok(db.rpc("assign_teacher",{p_student:el.dataset.id,p_teacher:el.value||null}));toast("Professor assigned.")}};
+const CHG={unlockStu(el){S.unlockStu=el.value;render()},async assign(el){await ok(db.rpc("assign_teacher",{p_student:el.dataset.id,p_teacher:el.value||null}));toast("Professor assigned.")},
+ studylevel(el){const form=el.closest("form"),ysel=form?.querySelector("[name=year]"),pg=el.value==="PG";if(!ysel)return;const opt3=ysel.querySelector('option[value="3"]');if(opt3)opt3.disabled=pg;if(pg&&ysel.value==="3")ysel.value=""}};
 
 document.addEventListener("click",async e=>{const el=e.target.closest("[data-act]");if(!el)return;try{await ACT[el.dataset.act]?.(el,e)}catch(err){console.error(err)}});
 document.addEventListener("submit",async e=>{const f=e.target.closest("[data-form]");if(!f)return;e.preventDefault();const b=f.querySelector("button:not([type=button])");if(b)b.disabled=true;try{await FORM[f.dataset.form](f,new FormData(f))}catch(err){console.error(err)}finally{if(b)b.disabled=false}});
@@ -852,7 +858,7 @@ $("homeLink").onclick=e=>{e.preventDefault();user?go("app",homeTab()):go("home")
 /* =====================================================================
    v6 MODULE: research journey, activity runner, confidence meter
    ===================================================================== */
-const PURPOSE={anxiety:"Anxiety questionnaire",pre_questionnaire:"Questionnaire (before pre-test)",pretest:"Pre-test",intervention:"Intervention",posttest:"Post-test",post_questionnaire:"Final questionnaire",practice:"Practice"};
+const PURPOSE={anxiety:"Anxiety questionnaire",pre_questionnaire:"Questionnaire (before pre-test)",pretest:"Pre-test",intervention:"Intervention",posttest:"Post-test",post_questionnaire:"Final questionnaire",practice:"Practice",general:"Normal quiz"};
 const KIND={quiz:"Quiz",reading:"Reading passage",flashcards:"Flashcards",questionnaire:"Questionnaire"};
 const SEGMENTS=["Podcast","Video","Graphic novel","Multimodal"];
 const AR_OPTS=["Both the assertion and the reason are true, and the reason correctly explains the assertion.","Both the assertion and the reason are true, but the reason does not explain the assertion.","The assertion is true, but the reason is false.","The assertion is false, but the reason is true."];
@@ -1098,10 +1104,10 @@ const band=p=>p==null?"-":p>=80?"Excellent":p>=60?"Good":p>=40?"Developing":"Nee
 const isStaff=()=>["teacher","researcher"].includes(role());
 let ED=null;
 const blankQ=kind=>kind==="questionnaire"?{type:"likert"}:{type:"mcq"};
-function newED(kind){ED={id:null,locked:false,qi:null,qf:blankQ(kind),keys:[],data:{kind,purpose:kind==="questionnaire"?"anxiety":kind==="flashcards"?"practice":"pretest",title:"",skill:"",segment:"",media_url:"",intro:"",passage:"",cards:[],questions:[],status:"draft",sort:0}}}
+function newED(kind,cat){ED={id:null,locked:false,qi:null,qf:blankQ(kind),keys:[],data:{kind,purpose:cat==="general"?"general":kind==="questionnaire"?"anxiety":kind==="flashcards"?"practice":"pretest",title:"",skill:"",segment:"",media_url:"",intro:"",passage:"",cards:[],questions:[],status:"draft",sort:0}}}
 async function loadED(id){const [a,k,att]=await Promise.all([ok(db.from("activities").select("*").eq("id",id).single()),ok(db.from("activity_keys").select("keys").eq("activity_id",id).maybeSingle()),ok(db.from("activity_attempts").select("id").eq("activity_id",id).limit(1))]);
  ED={id,locked:att.length>0,qi:null,qf:blankQ(a.kind),keys:k?.keys||[],data:{kind:a.kind,purpose:a.purpose,title:a.title,skill:a.skill||"",segment:a.segment||"",media_url:a.media_url||"",intro:a.intro||"",passage:a.passage||"",cards:a.cards||[],questions:a.questions||[],status:a.status,sort:a.sort||0}}}
-const purposesFor=k=>k==="questionnaire"?["anxiety","pre_questionnaire","post_questionnaire"]:k==="flashcards"?["practice"]:["pretest","intervention","posttest","practice"];
+const purposesFor=k=>k==="questionnaire"?["anxiety","pre_questionnaire","post_questionnaire","general"]:k==="flashcards"?["practice","general"]:["pretest","intervention","posttest","practice","general"];
 function edSync(){if(!ED)return;const d=ED.data;document.querySelectorAll("[data-ed]").forEach(el=>{d[el.dataset.ed]=el.dataset.ed==="sort"?(+el.value||0):el.value});
  const p=$("edPassage");if(p)d.passage=cleanHTML(p.innerHTML);
  const c=$("edCards");if(c)d.cards=c.value.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{const m=l.split(/\s*\|\s*|\s+[-–:]\s+|\t/);return {front:(m[0]||"").trim(),back:m.slice(1).join(" - ").trim()}}).filter(x=>x.front&&x.back);
@@ -1193,19 +1199,22 @@ async function libraryTab(){
  if(r.view==="perf")return perfPage();
  if(r.view==="host")return hostPage();
  ED=null;RUN.st=null;
+ const cat=r.lcat==="general"?"general":"research";
  const [acts,atts]=await Promise.all([ok(db.from("activities").select("*").order("sort").order("created_at")),fetchAll("activity_attempts","activity_id,student_id,status")]);
  const cnt={};atts.filter(a=>a.status==="done").forEach(a=>(cnt[a.activity_id]=cnt[a.activity_id]||new Set()).add(a.student_id));
- const f=r.f||"all",shown=acts.filter(a=>f==="all"||a.status===f);
+ const pool=acts.filter(a=>cat==="general"?a.purpose==="general":a.purpose!=="general");
+ const f=r.f||"all",shown=pool.filter(a=>f==="all"||a.status===f);
  const row=a=>{const n=a.kind==="flashcards"?a.cards.length:a.questions.length,tg=null;
   return `<div class="card lib-row"><div class="lib-main"><div class="row"><b>${esc(a.title)}</b><span class="chip ${a.status==="published"?"c-Completed":"c-Inprogress"}">${a.status==="published"?"Published":"Draft"}</span></div>
   <div class="muted small">${KIND[a.kind]}${a.skill?" · "+a.skill:""}${a.segment?" · "+a.segment:""} · ${n} ${a.kind==="flashcards"?"cards":a.kind==="questionnaire"?"statements":"questions"}${tg&&a.kind!=="flashcards"?` (target ${tg})`:""} · ${(cnt[a.id]?.size)||0} students completed</div></div>
   <div class="lib-acts"><button class="soft" data-act="libedit" data-id="${a.id}">Edit</button><button class="soft" data-act="libprev" data-id="${a.id}">Preview</button><button class="soft" data-act="libpub" data-id="${a.id}" data-s="${a.status==="published"?"draft":"published"}">${a.status==="published"?"Unpublish":"Publish"}</button>
   ${["quiz","reading"].includes(a.kind)?`<button class="soft" data-act="libhost" data-id="${a.id}">Host live</button>`:""}<button class="soft" data-act="libres" data-id="${a.id}">Results</button><button class="soft" data-act="libdup" data-id="${a.id}">Duplicate</button><button class="outline danger" data-act="libdel" data-id="${a.id}">Delete</button></div></div>`};
- const groups=Object.keys(PURPOSE).map(p=>[p,shown.filter(a=>a.purpose===p)]).filter(g=>g[1].length);
- return `<div class="head"><div class="eyebrow">MY LIBRARY</div><h1>Activities and content</h1><p>Create, preview, publish and remove everything students see in the research steps.</p></div>
- <div class="createbar">${[["quiz","✎","Quiz","Multiple choice, true/false, assertion-reason, matching"],["reading","☰","Reading passage","A passage with questions beside it"],["flashcards","❏","Flashcards","Term on the front, meaning on the back"],["questionnaire","◔","Questionnaire","Statements on a five-point scale"]].map(c=>`<button class="createtile" data-act="libnew" data-k="${c[0]}"><i>${c[1]}</i><b>${c[2]}</b><span>${c[3]}</span></button>`).join("")}</div>
- <div class="row" style="margin:18px 0 10px"><div class="seg">${[["all","All"],["draft","Drafts"],["published","Published"]].map(x=>`<button data-act="libf" data-f="${x[0]}" class="${f===x[0]?"on":""}">${x[1]} (${acts.filter(a=>x[0]==="all"||a.status===x[0]).length})</button>`).join("")}</div><button class="soft" data-act="rview" data-v="perf">Students by performance</button></div>
- ${groups.map(([p,list])=>`<h3 class="libh">${PURPOSE[p]}</h3><div class="stack">${list.map(row).join("")}</div>`).join("")||'<div class="empty">Nothing here yet. Choose a type above to create your first activity.</div>'}`}
+ const groups=cat==="general"?[["general",shown]].filter(g=>g[1].length):Object.keys(PURPOSE).filter(p=>p!=="general").map(p=>[p,shown.filter(a=>a.purpose===p)]).filter(g=>g[1].length);
+ return `<div class="head"><div class="eyebrow">MY LIBRARY</div><h1>Activities and content</h1><p>${cat==="general"?"Ordinary quizzes for everyday practice — kept separate from the main research sequence.":"Create, preview, publish and remove everything students see in the research steps."}</p></div>
+ <div class="seg" style="margin-bottom:16px">${[["research","Research activities"],["general","Normal quizzes"]].map(x=>`<button data-act="libcat" data-c="${x[0]}" class="${cat===x[0]?"on":""}">${x[1]}</button>`).join("")}</div>
+ <div class="createbar">${[["quiz","✎","Quiz","Multiple choice, true/false, assertion-reason, matching"],["reading","☰","Reading passage","A passage with questions beside it"],["flashcards","❏","Flashcards","Term on the front, meaning on the back"],["questionnaire","◔","Questionnaire","Statements on a five-point scale"]].map(c=>`<button class="createtile" data-act="libnew" data-k="${c[0]}" data-cat="${cat}"><i>${c[1]}</i><b>${c[2]}</b><span>${c[3]}</span></button>`).join("")}</div>
+ <div class="row" style="margin:18px 0 10px"><div class="seg">${[["all","All"],["draft","Drafts"],["published","Published"]].map(x=>`<button data-act="libf" data-f="${x[0]}" class="${f===x[0]?"on":""}">${x[1]} (${pool.filter(a=>x[0]==="all"||a.status===x[0]).length})</button>`).join("")}</div>${cat==="research"?'<button class="soft" data-act="rview" data-v="perf">Students by performance</button>':""}</div>
+ ${groups.map(([p,list])=>cat==="general"?`<div class="stack">${list.map(row).join("")}</div>`:`<h3 class="libh">${PURPOSE[p]}</h3><div class="stack">${list.map(row).join("")}</div>`).join("")||`<div class="empty">${cat==="general"?"No normal quizzes yet. Choose a type above to create one — it won't be part of the research sequence.":"Nothing here yet. Choose a type above to create your first activity."}</div>`}`}
 
 function editorPage(){
  const d=ED.data,isQ=d.kind==="questionnaire",isF=d.kind==="flashcards",n=d.questions.length,tg=null,f=ED.qf,lock=ED.locked;
@@ -1265,7 +1274,8 @@ async function perfPage(){
  <div class="card" style="overflow:auto"><table><thead><tr><th>Student</th><th>Pre-test</th><th>Interventions</th><th>Post-test</th><th>Overall</th><th>Band</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.s.full_name)}</td><td>${pct1(r.pre)}</td><td>${pct1(r.iv)}</td><td>${pct1(r.po)}</td><td><b>${pct1(r.o)}</b></td><td>${r.o==null?'<span class="muted">No tests yet</span>':`<span class="chip c-${band(r.o).replace(/\s/g,"")}">${band(r.o)}</span>`}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No students yet.</td></tr>'}</tbody></table></div>`}
 
 Object.assign(ACT,{
- libnew(el){newED(el.dataset.k);setR({view:"edit",id:null})},
+ libnew(el){newED(el.dataset.k,el.dataset.cat);setR({view:"edit",id:null})},
+ libcat(el){setR({lcat:el.dataset.c,f:"all"})},
  async libedit(el){await loadED(el.dataset.id);setR({view:"edit",id:el.dataset.id})},
  async libprev(el){await loadED(el.dataset.id);RUN.st=null;setR({view:"preview",id:el.dataset.id})},
  libf(el){setR({f:el.dataset.f})},libres(el){setR({view:"results",id:el.dataset.id})},
@@ -1388,13 +1398,14 @@ async function lgPull(){if(!LG)return false;let ch=false;
   LG.game=g.data;LG.players=(pl.data||[]).sort((a,b)=>b.score-a.score);LG.count=LG.players.length;return ch}
  const r=await db.rpc("live_state",LG.guest?{p_game:LG.id,p_player:LG.player,p_token:LG.token}:{p_game:LG.id});if(r.error||!r.data)return false;const d=r.data;
  ch=!LG.game||d.game.phase!==LG.game.phase||d.game.q_index!==LG.game.q_index||d.count!==LG.count;
- if(ch&&d.game.phase==="question"&&(!LG.game||LG.game.q_index!==d.game.q_index)){LG.picked=null;LG.matchSel=null;LG.matchSent=false}
+ if(ch&&d.game.phase==="question"&&(!LG.game||LG.game.q_index!==d.game.q_index)){LG.picked=null;LG.matchSel=null;LG.matchSent=false;LG.matchAwaitConf=false;LG.confSent=false}
  LG.skew=new Date(d.server_now).getTime()-Date.now();LG.game=d.game;LG.players=d.players;LG.me=d.me;LG.mine=d.mine;LG.count=d.count;return ch}
 function lgLoop(){stopTimers();every(1500,async()=>{if(!LG)return stopTimers();try{if(await lgPull())render();else lgTick()}catch{}});every(250,lgTick)}
 function lgTick(){const g=LG?.game;if(!g||g.phase!=="question")return;const l=lgLeft(g),b=$("lgBar"),t=$("lgSec");if(b)b.style.width=(100*l/g.seconds)+"%";if(t)t.textContent=Math.ceil(l);
  if(l<=0&&isStaff()&&!LG.auto){LG.auto=true;rpc("live_step",{p_game:LG.id,p_action:"reveal"}).then(()=>{LG.auto=false;lgPull().then(render)}).catch(()=>LG.auto=false)}}
 /* show every player who has joined, not just the top few, so none of their names or scores go missing on the host's screen */
 const podium=(pl,n=Infinity)=>`<ol class="board">${pl.slice(0,n).map((p,i)=>`<li class="${p.me||(user&&p.student_id===user.id)?"me":""}"><span>${["🥇","🥈","🥉"][i]||i+1}</span><b>${esc(p.name||"Player")}${p.is_guest?' <small class="guesttag">guest</small>':""}</b><em>${p.score}</em></li>`).join("")||'<li class="muted">No players yet</li>'}</ol>`;
+const confBlock=()=>`<div class="conf10">${Array.from({length:10},(_,i)=>`<button type="button" class="confbtn" data-act="lgconf" data-v="${i+1}">${i+1}</button>`).join("")}</div><p class="muted small">How confident are you in that answer? 1 = not at all, 10 = very confident</p>`;
 function lgQuestion(g,opts={}){const q=g.current;if(!q)return "";const labels=q.type==="tf"?["True","False"]:q.type==="ar"?AR_OPTS:q.options||[];const rv=g.phase==="reveal"?g.reveal:null;const tot=rv?Object.values(rv.counts||{}).reduce((a,b)=>a+b,0):0;
  const stem=q.type==="ar"?`<div class="ar"><b>Assertion (A)</b> ${esc(q.assertion)}</div><div class="ar"><b>Reason (R)</b> ${esc(q.reason)}</div>`:esc(q.q||"");
  if(q.type==="match"){
@@ -1402,18 +1413,19 @@ function lgQuestion(g,opts={}){const q=g.current;if(!q)return "";const labels=q.
   if(rv)return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><b>${esc(q.right[rv.answer[i]])}</b></div>`).join("")}</div></div>${rv.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`;
   if(opts.play){
    if(myAns||LG.matchSent)return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map(l=>`<div class="mrow"><span>${esc(l)}</span><b>…</b></div>`).join("")}</div></div>`;
+   if(LG.matchAwaitConf)return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map(l=>`<div class="mrow"><span>${esc(l)}</span><b>…</b></div>`).join("")}</div></div>${confBlock()}`;
    const sel=LG.matchSel||(LG.matchSel=Array(q.left.length).fill(null));const done=sel.every(x=>x!=null);
    return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><select data-chg="lgmatchpick" data-li="${i}"><option value="">Choose…</option>${q.right.map((r,ri)=>`<option value="${ri}" ${sel[i]===ri?"selected":""}>${esc(r)}</option>`).join("")}</select></div>`).join("")}</div></div><button type="button" class="primary big-btn" data-act="lgmatchsend" ${done?"":"disabled"}>Submit matches</button>`}
   return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map(l=>`<div class="mrow"><span>${esc(l)}</span><b>?</b></div>`).join("")}</div></div><p class="muted small">Students match each item on their own phones.</p>`}
  return `<div class="lg-q">${stem}</div><div class="tiles big t${labels.length}">${labels.map((o,i)=>{const c=rv?(rv.counts?.[String(i)]||0):0;const cls=rv?(rv.answer===i?" right":" dim"):(LG.picked===i?" picked":LG.picked!=null?" dim":"");
-  return `<button type="button" class="tile c${i%4}${cls}" ${opts.play&&!rv&&LG.picked==null?`data-act="lgpick" data-v="${i}"`:"disabled"}><span>${"ABCD"[i]}</span>${esc(o)}${rv?`<em class="cnt">${c}${tot?` · ${Math.round(100*c/tot)}%`:""}</em>`:""}</button>`}).join("")}</div>${rv?.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`}
+  return `<button type="button" class="tile c${i%4}${cls}" ${opts.play&&!rv&&LG.picked==null?`data-act="lgpick" data-v="${i}"`:"disabled"}><span>${"ABCD"[i]}</span>${esc(o)}${rv?`<em class="cnt">${c}${tot?` · ${Math.round(100*c/tot)}%`:""}</em>`:""}</button>`}).join("")}</div>${opts.play&&!rv&&LG.picked!=null&&g.ask_confidence&&!LG.confSent?confBlock():""}${rv?.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`}
 async function hostPage(){
  if(!LG||LG.id!==R().id){LG={id:R().id,host:true};await lgPull()}
  const g=LG.game;if(!g){LG=null;return '<div class="card">This live quiz has ended.</div>'}
  S.after=lgLoop;const pl=LG.players;
  if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ · ${esc(g.title||"")}</div><p>Students open <b>Live class</b> on the website and type this code</p><div class="lg-code">${g.code.split("").join("<i></i>")}</div>
   <div class="lg-players"><b>${pl.length}</b> joined${pl.length?`<div class="namecloud">${pl.map(p=>`<span>${esc(p.name||"")}</span>`).join("")}</div>`:""}</div><div class="actions"><button class="primary big-btn" data-act="lgstep" data-a="next" ${pl.length?"":"disabled"}>Start quiz</button><button class="outline" data-act="lgstep" data-a="end">Cancel</button></div></div>`;
- if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>Final results</h1>${podium(pl,10)}<div class="actions"><button class="primary" data-act="lgclose">Back to My library</button></div></div><div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`;
+ if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>Final results</h1>${podium(pl,10)}<div class="actions"><button class="primary" data-act="lgclose">Back to My library</button>${g.collect_profile?`<button class="soft" data-act="lgcsv" data-id="${g.id}">Download guest data (CSV)</button>`:""}</div></div><div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`;
  const answered=g.phase==="reveal"?null:"";
  return `<div class="lg-stage"><div class="row"><span class="badge">Question ${g.q_index+1} of ${g.n}</span>${g.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(lgLeft(g))}</b>s</span>`:'<span class="badge">Answer</span>'}<span class="muted small">${pl.length} players</span></div>
   ${g.phase==="question"?`<div class="bar lgbar"><i id="lgBar" style="width:${100*lgLeft(g)/g.seconds}%"></i></div>`:""}${lgQuestion(g)}
@@ -1428,7 +1440,8 @@ function playPage(){
  if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ</div><h1>You're in!</h1><p class="muted">${esc(g.title||"")}</p>${who}<div class="lg-wait"><span></span><span></span><span></span></div><p>Waiting for the quiz to start. ${LG.count||0} joined so far.</p></div>`;
  if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>${rank===1?"You won! 🏆":rank?`You finished #${rank}`:"Finished"}</h1><p class="muted">${meRow?.score||0} points</p>${podium(pl)}<div class="actions"><button class="primary" data-act="lgleave">Done</button></div></div>${rank&&rank<=3?`<div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`:""}`;
  const my=(LG.mine||[]).find(a=>a.q_index===g.q_index);
- const status=g.phase==="reveal"?`<div class="fb ${my?.correct?"good":"bad"} lg-result"><b>${my?(my.correct?`✓ Correct! +${my.points} points`:"✗ Not this time"):"⏱ No answer"}</b><span>Your score: ${meRow?.score||0}${rank?` · position #${rank}`:""}</span></div>`:(LG.picked!=null||LG.matchSent||my)?'<div class="fb lg-result"><b>Answer locked in</b><span>Wait for the result…</span></div>':"";
+ const awaitingConf=g.ask_confidence&&!LG.confSent&&(LG.matchAwaitConf||(LG.picked!=null&&!LG.matchSel));
+ const status=g.phase==="reveal"?`<div class="fb ${my?.correct?"good":"bad"} lg-result"><b>${my?(my.correct?`✓ Correct! +${my.points} points`:"✗ Not this time"):"⏱ No answer"}</b><span>Your score: ${meRow?.score||0}${rank?` · position #${rank}`:""}</span></div>`:(!awaitingConf&&(LG.picked!=null||LG.matchSent||my))?'<div class="fb lg-result"><b>Answer locked in</b><span>Wait for the result…</span></div>':"";
  if(my&&LG.picked==null)LG.picked=-1;
  return `<div class="lg-stage"><div class="row"><span class="badge">Question ${g.q_index+1} of ${g.n}</span>${g.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(lgLeft(g))}</b>s</span>`:""}<span class="muted small">${meRow?.score||0} pts</span></div>
  ${g.phase==="question"?`<div class="bar lgbar"><i id="lgBar" style="width:${100*lgLeft(g)/g.seconds}%"></i></div>`:""}${lgQuestion(g,{play:true})}${status}</div>`}
@@ -1441,16 +1454,29 @@ async function joinLiveQuiz(code){ /* true when the code belonged to a live quiz
  if(user&&role()==="student"){const r=await db.rpc("live_join",{p_code:code});if(r.error){toast(r.error.message);return true}LG={id:r.data};await lgPull();S.page="app";S.tab="live";S.r={view:"play",id:r.data};render();return true}
  const name=($("displayName")?.value||"").trim();
  if(name.length<2){toast(`Found "${look.data.title||"Live quiz"}". Type your name, then press Join again.`);$("displayName")?.focus();return true}
- const r=await db.rpc("live_join_guest",{p_code:code,p_name:name});if(r.error){toast(r.error.message);return true}
- LG={id:r.data.game,guest:true,player:r.data.player,token:r.data.token};try{sessionStorage.setItem("llc_guest",JSON.stringify(LG))}catch{}
- await lgPull();S={page:"play"};render();return true}
+ const doJoin=async det=>{const args={p_code:code,p_name:name};if(det)Object.assign(args,{p_subject:det.subject,p_study_level:det.study_level,p_year:det.year,p_locality:det.locality,p_gender:det.gender,p_native:det.native,p_consent:det.consent});
+  const r=await db.rpc("live_join_guest",args);if(r.error){toast(r.error.message);return}
+  LG={id:r.data.game,guest:true,player:r.data.player,token:r.data.token};try{sessionStorage.setItem("llc_guest",JSON.stringify(LG))}catch{}
+  await lgPull();S={page:"play"};render()};
+ if(look.data.collect_profile){demoForm(name,doJoin);return true}
+ await doJoin(null);return true}
 Object.assign(ACT,{
  async libhost(el){const g=await rpc("live_host",{p_activity:el.dataset.id,p_seconds:20});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},
  async lgstep(el){if(el.dataset.a==="end"&&!confirm("End this live quiz now?"))return;await rpc("live_step",{p_game:LG.id,p_action:el.dataset.a});await lgPull();if(el.dataset.a==="end"&&LG.game?.q_index<0){stopTimers();LG=null;return setR({})}render()},
+ async lgcsv(el){const gid=el.dataset.id;const rows=await rpc("live_guest_csv",{p_game:gid});
+  download(`live_quiz_guests_${gid.slice(0,8)}.csv`,[csvLine(["Name","Guest","Score","Subject","Study level","Year","Rural/Urban","Gender","Native","Consent","Avg confidence (1-10)"]),
+   ...rows.map(p=>csvLine([p.name||"",p.is_guest?"Yes":"No",p.score,p.g_subject||"",p.g_study_level||"",p.g_year||"",p.g_locality||"",p.g_gender||"",p.g_native||"",p.g_consent?"Yes":"No",p.avg_confidence??""]))].join("\n"))},
  lgclose(){stopTimers();LG=null;setR({})},lgleave(){stopTimers();const g=LG?.guest;LG=null;try{sessionStorage.removeItem("llc_guest")}catch{};if(g||S.page==="play"){S={page:"join"};render()}else setR({})},
- async lgpick(el){if(LG.picked!=null)return;LG.picked=+el.dataset.v;render();try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:LG.picked}):rpc("live_answer",{p_game:LG.id,p_answer:LG.picked}));try{playFeedbackSound(true)}catch{}}catch(e){}},
- async lgmatchsend(){const sel=LG.matchSel;if(!sel||sel.some(x=>x==null))return toast("Match every item first.");if(LG.matchSent)return;LG.matchSent=true;render();
-  try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:sel}):rpc("live_answer",{p_game:LG.id,p_answer:sel}));try{playFeedbackSound(true)}catch{}}catch(e){LG.matchSent=false;toast(e.message||"Could not send your answer.");render()}}});
+ async lgpick(el){if(LG.picked!=null)return;LG.picked=+el.dataset.v;render();
+  if(LG.game?.ask_confidence)return; /* wait for the confidence tap before sending */
+  try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:LG.picked}):rpc("live_answer",{p_game:LG.id,p_answer:LG.picked}));try{playFeedbackSound(true)}catch{}}catch(e){}},
+ async lgmatchsend(){const sel=LG.matchSel;if(!sel||sel.some(x=>x==null))return toast("Match every item first.");if(LG.matchSent||LG.matchAwaitConf)return;
+  if(LG.game?.ask_confidence){LG.matchAwaitConf=true;render();return}
+  LG.matchSent=true;render();
+  try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:sel}):rpc("live_answer",{p_game:LG.id,p_answer:sel}));try{playFeedbackSound(true)}catch{}}catch(e){LG.matchSent=false;toast(e.message||"Could not send your answer.");render()}},
+ async lgconf(el){const v=+el.dataset.v;const isMatch=LG.matchAwaitConf;const ans=isMatch?LG.matchSel:LG.picked;
+  if(isMatch)LG.matchSent=true;LG.confSent=true;render();
+  try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:ans,p_confidence:v}):rpc("live_answer",{p_game:LG.id,p_answer:ans,p_confidence:v}));try{playFeedbackSound(true)}catch{}}catch(e){LG.confSent=false;if(isMatch){LG.matchSent=false;LG.matchAwaitConf=true}toast(e.message||"Could not send your answer.");render()}}});
 CHG.lgmatchpick=el=>{const li=+el.dataset.li;const sel=LG.matchSel||(LG.matchSel=[]);sel[li]=el.value===""?null:+el.value;render()};
 
 /* =====================================================================
@@ -1726,12 +1752,16 @@ async function liveTabStaff(){
   <label>Paste your questions, or upload a file<textarea name="txt" id="lqText" rows="10" placeholder="1. What is a tide?&#10;A) Rise and fall of the sea&#10;B) A fish&#10;C) A boat&#10;D) A net&#10;Answer: A&#10;Explanation: Tides are the rise and fall of the sea.">${esc(r.lqText||"")}</textarea></label>
   <div class="upl"><label class="filebtn"><input type="file" accept=".csv,.txt,.tsv,.xlsx,.docx" data-chg="lqfile">⬆ Upload a file</label><span class="muted small">Word (.docx), Excel (.xlsx), CSV or text. Numbered questions with A) B) C) D) options and "Answer: B", or the template columns.</span><button type="button" class="linklike" data-act="lqtemplate">Download the template</button></div>
   ${r.lqErrs?.length?`<div class="notice"><b>${r.lqErrs.length} part(s) could not be read:</b><ul class="small">${r.lqErrs.slice(0,10).map(e=>`<li>${esc(e)}</li>`).join("")}</ul></div>`:""}
+  <label class="check"><input type="checkbox" name="collect_profile"> Collect each participant's details (subject, year, gender, native place, rural/urban) and consent before they can join — not needed for every live quiz</label>
+  <label class="check"><input type="checkbox" name="ask_confidence"> Ask participants to rate how confident they are (1–10) after each answer</label>
   <div class="actions" style="margin:0"><button type="button" class="soft" data-act="lqcheck">Check questions</button><button class="primary big-btn">Create and start ▶</button></div><div id="lqPreview">${r.lqPrev||""}</div></form>`;
  else form=`<form data-form="session" data-type="${t}" class="card stack lbuild"><div class="form-grid"><label>Title<input name="title" required placeholder="e.g. Warm-up"></label><label>Timer${timerSel("timer","",true)}</label></div>
   <label>${t==="word"?"Prompt (e.g. One word that describes the sea)":t==="open"?"Question":"Question"}<textarea name="prompt" rows="2" required></textarea></label>
   ${t==="poll"?`<label>Choices, one per line. Paste as many as you need, or upload a file<textarea name="options" id="pollOpts" rows="6" required placeholder="Listening&#10;Speaking&#10;Reading&#10;Writing" data-inp="pollcount"></textarea></label>
   <div class="upl"><label class="filebtn"><input type="file" accept=".csv,.txt,.tsv,.xlsx,.docx" data-chg="pollfile">⬆ Upload choices</label><span class="muted small" id="pollCount">Word (.docx), Excel (.xlsx), CSV or text: one choice per line or per cell. A first line ending in "?" (or starting with "Question:") becomes the question.</span><button type="button" class="linklike" data-act="polltemplate">Download the template</button></div>
   <label class="check"><input type="checkbox" name="show_results" checked> Show the live percentages on participants' phones after they vote</label>`:""}
+  <label class="check"><input type="checkbox" name="collect_profile"> Collect each participant's details (subject, year, gender, native place, rural/urban) and consent before they can join — not needed for every live activity</label>
+  <label class="check"><input type="checkbox" name="ask_confidence"> Ask participants to rate how confident they are (1–10) after they answer</label>
   <button class="primary big-btn">Create and start ▶</button></form>`;
  const lqList=lq.map(a=>`<div class="activity"><div class="badge">Quiz</div><div class="info"><b>${esc(a.title)}</b><small>${a.questions.length} questions · ${new Date(a.created_at).toLocaleDateString()}</small></div><button class="soft" data-act="lqhost" data-id="${a.id}">Start again</button><button class="soft" data-act="libedit2" data-id="${a.id}">Edit</button><button class="outline danger" data-act="lqdel" data-id="${a.id}">Delete</button></div>`).join("");
  const sList=ss.map(x=>`<div class="activity"><div class="badge">${({poll:"Poll",word:"Word cloud",quiz:"Question",open:"Open"})[x.activity_type]}</div><div class="info"><b>${esc(x.title)}</b><small>Code ${x.code} · ${x.is_open?"open":"closed"}</small></div><button class="soft" data-act="present" data-id="${x.id}">Open</button><button class="outline danger" data-act="sessdel" data-id="${x.id}">Delete</button></div>`).join("");
@@ -1761,11 +1791,11 @@ Object.assign(FORM,{
  async lqcreate(f,d){const p=parseImport(d.get("txt"),"quiz");if(!p.out.length)return toast(p.errs[0]?`No questions found. ${p.errs[0]}`:"Paste questions or upload a file first.");
   if(p.errs.length&&!confirm(`${p.out.length} question(s) are ready and ${p.errs.length} part(s) could not be read. Start with the ${p.out.length} question(s)?`))return;
   const id=await rpc("save_activity",{p_id:null,p_data:{kind:"quiz",purpose:"live",title:String(d.get("title")).trim(),questions:p.out.map(x=>x.q),status:"published"},p_keys:p.out.map(x=>x.k)});
-  const g=await rpc("live_host",{p_activity:id,p_seconds:+d.get("seconds")||20});LG={id:g.id,host:true};await lgPull();S.r={view:"host",id:g.id};render();window.scrollTo(0,0)},
+  const g=await rpc("live_host",{p_activity:id,p_seconds:+d.get("seconds")||20,p_collect_profile:d.get("collect_profile")==="on",p_ask_confidence:d.get("ask_confidence")==="on"});LG={id:g.id,host:true};await lgPull();S.r={view:"host",id:g.id};render();window.scrollTo(0,0)},
  async session(f,d){const type=f.dataset.type||d.get("type"),opts=type==="poll"?pollChoices(String(d.get("options")||"")).opts:String(d.get("options")||"").split("\n").map(x=>x.trim()).filter(Boolean);
   if((type==="poll"||type==="quiz")&&opts.length<2)return toast("Add at least two choices.");if(new Set(opts).size!==opts.length)return toast("Each choice must be different.");
   const sec=+d.get("timer")||0;let code,n=0;do{code=String(Math.floor(100000+Math.random()*900000));n++}while(n<6&&((await db.from("sessions").select("id").eq("code",code)).data||[]).length);
-  const r=await ok(db.from("sessions").insert({owner_id:user.id,code,title:d.get("title"),prompt:d.get("prompt"),activity_type:type,options:(type==="poll"||type==="quiz")?opts:[],correct_answer:type==="quiz"?opts[0]:null,anonymous_allowed:true,show_results:type==="poll"?d.get("show_results")==="on":true,is_open:true,timer_seconds:sec||null,ends_at:sec?new Date(Date.now()+sec*1000).toISOString():null}).select("id").single());
+  const r=await ok(db.from("sessions").insert({owner_id:user.id,code,title:d.get("title"),prompt:d.get("prompt"),activity_type:type,options:(type==="poll"||type==="quiz")?opts:[],correct_answer:type==="quiz"?opts[0]:null,anonymous_allowed:true,show_results:type==="poll"?d.get("show_results")==="on":true,is_open:true,timer_seconds:sec||null,ends_at:sec?new Date(Date.now()+sec*1000).toISOString():null,collect_profile:d.get("collect_profile")==="on",ask_confidence:d.get("ask_confidence")==="on"}).select("id").single());
   S.present=r.id;render();window.scrollTo(0,0)}});
 
 /* ---------- presenter screen with motion ---------- */
@@ -1803,6 +1833,32 @@ async function refreshResults(){
  else{let ls=box.querySelector(".resp");if(!ls){box.innerHTML='<div class="resp"></div>';ls=box.querySelector(".resp");PR.shown=0}
   rows.slice(PR.shown).forEach(r=>{const d=document.createElement("div");d.className="rcard";d.innerHTML=`<p>${esc(r.answer)}</p><small>${esc(r.participant_name||"Anonymous")}</small>`;ls.prepend(d)});PR.shown=rows.length}}
 
+/* ---------- optional guest-details form: subject, year, gender, native place, rural/urban, consent ---------- */
+let DEMO=null; /* {go} */
+function demoForm(name,go){DEMO={go};const box=$("participant");if(!box)return;
+ box.innerHTML=`<div class="pcard-in"><div class="eyebrow">A FEW DETAILS</div><p class="muted small">The presenter has asked for a few details before you can join${name?", "+esc(name.split(" ")[0]):""}. This is for the research record only.</p>
+ <form data-form="demo" class="stack">
+  <label>Subject / stream<input name="subject" required placeholder="e.g. Tamil, English"></label>
+  <label>Study level<select name="study_level" required><option value="">Select</option><option value="UG">UG</option><option value="PG">PG</option></select></label>
+  <label>Year<select name="year" required><option value="">Select</option><option value="1">I Year</option><option value="2">II Year</option><option value="3">III Year</option></select></label>
+  <label>Gender<select name="gender" required><option value="">Select</option><option>Female</option><option>Male</option><option>Other</option><option>Prefer not to say</option></select></label>
+  <label>Native place<input name="native" required></label>
+  <label>Rural / Urban<select name="locality" required><option value="">Select</option><option value="Rural">Rural</option><option value="Urban">Urban</option></select></label>
+  <label class="check"><input type="checkbox" name="consent" required> I agree to take part and to share these details for this activity.</label>
+  <button class="primary">Continue</button>
+ </form></div>`;
+ setTimeout(()=>box.scrollIntoView({behavior:"smooth",block:"start"}),60)}
+Object.assign(FORM,{demo(f,d){const det={subject:String(d.get("subject")||"").trim(),study_level:d.get("study_level")||null,year:+d.get("year")||null,gender:String(d.get("gender")||"").trim(),native:String(d.get("native")||"").trim(),locality:d.get("locality")||null,consent:d.get("consent")==="on"};
+ if(!det.subject||!det.study_level||!det.year||!det.gender||!det.native||!det.locality||!det.consent)return toast("Please fill in every field and tick the consent box.");
+ DEMO?.go(det)}});
+/* ---------- a simple 1-10 confidence tap before the answer is actually sent ---------- */
+function confPicker(onPick){const box=$("participant");if(!box)return;
+ box.innerHTML=`<div class="pcard-in"><div class="eyebrow">ONE MORE THING</div><div class="question">How confident are you in your answer?</div>
+ <div class="conf10">${Array.from({length:10},(_,i)=>`<button type="button" class="confbtn" data-act="confpick" data-v="${i+1}">${i+1}</button>`).join("")}</div>
+ <p class="muted small">1 = not at all confident · 10 = very confident</p></div>`;
+ CONFPICK=onPick;setTimeout(()=>box.scrollIntoView({behavior:"smooth",block:"start"}),60)}
+let CONFPICK=null;
+ACT.confpick=el=>{const v=+el.dataset.v;const cb=CONFPICK;CONFPICK=null;cb?.(v)};
 /* ---------- participants (no login needed) ---------- */
 let PART=null;
 function remember(n){try{sessionStorage.setItem("llc_name",n)}catch{}}
@@ -1813,7 +1869,9 @@ ACT.lookup=async()=>{
  const r=await db.rpc("get_public_session",{join_code:code});if(r.error||!r.data?.length)return toast("No live activity found with that code. Check the code with your teacher.");
  const x=r.data[0];if(!x.session_open)return toast("This activity is closed.");
  if(!user&&name.length<2){$("displayName")?.focus();return toast("Type your name, then press Join.")}
- PART={code,x,name:user?(name||profile?.full_name||""):name,skew:new Date(x.server_now).getTime()-Date.now(),sent:0};sessionNow={code,activity_type:x.activity_type};partRender()};
+ const begin=det=>{PART={code,x,name:user?(name||profile?.full_name||""):name,skew:new Date(x.server_now).getTime()-Date.now(),sent:0,det};sessionNow={code,activity_type:x.activity_type};partRender()};
+ if(x.collect_profile)return demoForm(name,begin);
+ begin(null)};
 function partRender(){const P=PART,x=P.x,box=$("participant");if(!box)return;const opt=["poll","quiz"].includes(x.activity_type);
  box.innerHTML=`<div class="pcard-in"><div class="row"><div class="eyebrow">${esc(x.session_title)}</div>${x.ends_at?`<span class="ptimer small"><b id="paSec"></b></span>`:""}</div>${x.ends_at?'<div class="tbar"><i id="paBar"></i></div>':""}
  <div class="question">${esc(x.session_prompt)}</div>
@@ -1822,11 +1880,17 @@ function partRender(){const P=PART,x=P.x,box=$("participant");if(!box)return;con
  setTimeout(()=>box.scrollIntoView({behavior:"smooth",block:"start"}),60);
  stopTimers();if(x.ends_at){const tot=Math.max(5,(new Date(x.ends_at).getTime()-(Date.now()+P.skew))/1000);every(250,()=>{const l=Math.max(0,(new Date(x.ends_at).getTime()-(Date.now()+P.skew))/1000),b=$("paBar"),t=$("paSec");if(!b){stopTimers();return}b.style.width=Math.min(100,100*l/tot)+"%";b.parentElement.classList.toggle("warn",l<=5);t.textContent=l>0?Math.ceil(l)+" s left":"Time's up";if(l<=0){document.querySelectorAll("#participant .answer,#participant .sendbtn,#free").forEach(e=>e.disabled=true)}})}}
 ACT.pickans=el=>{document.querySelectorAll(".answer").forEach(b=>b.classList.remove("selected"));el.classList.add("selected");$("answers").dataset.a=el.dataset.a};
-ACT.send=async()=>{const P=PART;if(!P)return;const a=$("answers"),ans=a?.dataset.a||$("free")?.value.trim();if(!ans)return toast("Choose or type an answer.");
- const r=await db.rpc("submit_session_response",{join_code:P.code,answer_text:ans,display_name:P.name||null});if(r.error)return toast(r.error.message);P.sent++;
+async function sendAnswer(ans,conf){const P=PART;
+ const args={join_code:P.code,answer_text:ans,display_name:P.name||null};
+ if(P.det)Object.assign(args,{p_subject:P.det.subject,p_study_level:P.det.study_level,p_year:P.det.year,p_locality:P.det.locality,p_gender:P.det.gender,p_native:P.det.native,p_consent:P.det.consent});
+ if(conf!=null)args.p_confidence=conf;
+ const r=await db.rpc("submit_session_response",args);if(r.error)return toast(r.error.message);P.sent++;
  const again=P.x.activity_type!=="poll"&&P.x.activity_type!=="quiz";stopTimers();
  if(P.x.activity_type==="poll"){const live=await pollLive(P,ans);if(live)return}
- $("participant").innerHTML=`<div class="sent"><svg viewBox="0 0 52 52" class="tick" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg><h3>Sent! Thank you${P.name?", "+esc(P.name.split(" ")[0]):""}.</h3><p class="muted">Your answer is on the presenter's screen.</p>${again?'<button class="soft" data-act="sendmore">Send another answer</button>':""}<button class="outline" data-act="joinother">Join another code</button></div>`};
+ $("participant").innerHTML=`<div class="sent"><svg viewBox="0 0 52 52" class="tick" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg><h3>Sent! Thank you${P.name?", "+esc(P.name.split(" ")[0]):""}.</h3><p class="muted">Your answer is on the presenter's screen.</p>${again?'<button class="soft" data-act="sendmore">Send another answer</button>':""}<button class="outline" data-act="joinother">Join another code</button></div>`}
+ACT.send=async()=>{const P=PART;if(!P)return;const a=$("answers"),ans=a?.dataset.a||$("free")?.value.trim();if(!ans)return toast("Choose or type an answer.");
+ if(P.x.ask_confidence)return confPicker(v=>sendAnswer(ans,v));
+ await sendAnswer(ans,null)};
 ACT.sendmore=()=>partRender();
 ACT.joinother=()=>{PART=null;stopTimers();const p=$("participant");if(p)p.innerHTML="";const c=$("joinCode");if(c){c.value="";c.focus()}};
 /* fill the name the participant used before */
