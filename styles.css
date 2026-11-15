@@ -434,6 +434,7 @@ button,a{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 /* participant */
 .pcard-in{display:grid;gap:12px;animation:rise .4s ease both}.pcard-in .question{font:800 20px/1.4 Manrope}
 .conf10{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:6px 0}.confbtn{background:#f7f8fc;border:1px solid var(--line);border-radius:10px;padding:14px 0;font:800 16px Manrope;color:var(--ink)}.confbtn:hover{background:var(--lav);color:var(--purple)}@media(max-width:520px){.conf10{grid-template-columns:repeat(5,1fr)}}
+.statbox{background:#f7f8fc;border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:4px}.statbox b{font:800 22px Manrope;color:var(--purple)}.statbox span{font-size:12.5px;color:var(--muted)}
 #participant .answer{animation:pop .4s cubic-bezier(.2,1.4,.4,1) both;animation-delay:calc(var(--i)*70ms);transition:transform .15s,box-shadow .2s,background .2s}
 #participant .answer:hover{transform:translateY(-2px)}#participant .answer.selected{transform:scale(1.03);box-shadow:0 0 0 3px #b9b1ff}
 .sent{display:grid;justify-items:center;text-align:center;gap:8px;animation:rise .4s ease both}.sent h3{margin:4px 0 0}

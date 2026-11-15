@@ -1190,6 +1190,37 @@ function templateCSV(kind){
 const qLabel=q=>q.q||q.assertion||"Match the following";
 const typeName={mcq:"Multiple choice",tf:"True / False",ar:"Assertion & reason",match:"Match the following",likert:"Statement (1–5)"};
 
+const libSeg=cur=>`<div class="seg" style="margin-bottom:16px">${[["research","Research activities"],["general","Normal quizzes"],["guestdata","Guest Live Quiz data"]].map(x=>`<button data-act="libcat" data-c="${x[0]}" class="${cur===x[0]?"on":""}">${x[1]}</button>`).join("")}</div>`;
+/* "Guest Live Quiz data" folder: every live quiz / poll / wordcloud / open-response session
+   this teacher turned on guest-detail collection for, across every activity. */
+async function guestDataListPage(){
+ const rows=await rpc("my_guest_quizzes");
+ return `<div class="head"><div class="eyebrow">MY LIBRARY</div><h1>Guest Live Quiz data</h1><p>Demographic details and consent collected from participants, for every live quiz or session where you turned that on.</p></div>
+ ${libSeg("guestdata")}
+ <div class="stack">${rows.map(s=>`<div class="card lib-row"><div class="lib-main"><div class="row"><b>${esc(s.title||"Untitled")}</b><span class="chip ${s.is_open?"c-Inprogress":"c-Completed"}">${s.is_open?"Open":"Ended / closed"}</span></div>
+  <div class="muted small">${s.kind==="live_quiz"?"Live quiz":"Session"} · Code ${esc(s.code)} · ${s.n_participants} participant(s) · ${fmtDT(s.created_at)}</div></div>
+  <div class="lib-acts"><button class="soft" data-act="lgdatareport" data-id="${s.id}" data-k="${s.kind}">View report</button></div></div>`).join("")||'<div class="empty">No guest details collected yet. Turn on "Collect each participant\'s details" when you host a live quiz, poll, wordcloud or open-response session.</div>'}</div>`}
+async function guestReportPage(id,kind){
+ if(kind==="live_quiz"){
+  const rows=await rpc("live_guest_csv",{p_game:id});
+  return `<div class="head"><div class="eyebrow">GUEST LIVE QUIZ DATA</div><h1>Live quiz report</h1></div>
+  ${libSeg("guestdata")}<div class="actions" style="margin-bottom:12px"><button class="outline" data-act="libcat" data-c="guestdata">← Back to Guest Live Quiz data</button></div>
+  ${guestReportHTML(rows)}`}
+ const [s,rows]=await Promise.all([ok(db.from("sessions").select("title,code").eq("id",id).single()),ok(db.from("responses").select("participant_name,is_anonymous,answer,created_at,g_subject,g_study_level,g_year,g_locality,g_gender,g_native,g_consent,confidence").eq("session_id",id))]);
+ const withConf=rows.filter(r=>r.confidence!=null);
+ const bandCounts={"Low confidence":0,"Neutral":0,"High confidence":0};
+ withConf.forEach(r=>bandCounts[confBand(r.confidence)]++);
+ const avgConf=withConf.length?mean(withConf.map(r=>r.confidence)):null;
+ return `<div class="head"><div class="eyebrow">GUEST LIVE QUIZ DATA</div><h1>${esc(s.title||"Session")} report</h1></div>
+ ${libSeg("guestdata")}<div class="actions" style="margin-bottom:12px"><button class="outline" data-act="libcat" data-c="guestdata">← Back to Guest Live Quiz data</button></div>
+ <div class="card stack" style="text-align:left"><h3>Overall report</h3><div class="form-grid">
+  <div class="statbox"><b>${avgConf==null?"-":fx(avgConf,1)}</b><span>Overall confidence (1-10)</span></div>
+  <div class="statbox"><b>${bandCounts["Low confidence"]}</b><span>Low confidence (1-3)</span></div>
+  <div class="statbox"><b>${bandCounts["Neutral"]}</b><span>Neutral (4-7)</span></div>
+  <div class="statbox"><b>${bandCounts["High confidence"]}</b><span>High confidence (8-10)</span></div></div>
+  <h3>Participants (${rows.length})</h3><div style="overflow:auto"><table><thead><tr><th>Participant</th><th>Anonymous</th><th>Answer</th><th>Subject</th><th>Study level</th><th>Year</th><th>Rural/Urban</th><th>Gender</th><th>Native</th><th>Consent</th><th>Confidence (1-10)</th><th>Band</th><th>Submitted</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr><td>${esc(r.participant_name||"Anonymous")}</td><td>${r.is_anonymous?"Yes":"No"}</td><td>${esc(r.answer||"")}</td><td>${esc(r.g_subject||"-")}</td><td>${esc(r.g_study_level||"-")}</td><td>${r.g_year??"-"}</td><td>${esc(r.g_locality||"-")}</td><td>${esc(r.g_gender||"-")}</td><td>${esc(r.g_native||"-")}</td><td>${r.g_consent?"Yes":"No"}</td><td>${r.confidence??"-"}</td><td>${confBand(r.confidence)||"-"}</td><td>${fmtDT(r.created_at)}</td></tr>`).join("")||'<tr><td colspan="13" class="muted">No submissions yet.</td></tr>'}
+  </tbody></table></div></div>`}
 async function libraryTab(){
  const r=R();
  if((r.view==="edit"||r.view==="preview")&&!ED){if(r.id)await loadED(r.id);else r.view=null}
@@ -1198,8 +1229,10 @@ async function libraryTab(){
  if(r.view==="results")return resultsPage(r.id);
  if(r.view==="perf")return perfPage();
  if(r.view==="host")return hostPage();
+ if(r.view==="guestreport")return guestReportPage(r.gid,r.gkind);
  ED=null;RUN.st=null;
- const cat=r.lcat==="general"?"general":"research";
+ const cat=r.lcat==="guestdata"?"guestdata":r.lcat==="general"?"general":"research";
+ if(cat==="guestdata")return guestDataListPage();
  const [acts,atts]=await Promise.all([ok(db.from("activities").select("*").order("sort").order("created_at")),fetchAll("activity_attempts","activity_id,student_id,status")]);
  const cnt={};atts.filter(a=>a.status==="done").forEach(a=>(cnt[a.activity_id]=cnt[a.activity_id]||new Set()).add(a.student_id));
  const pool=acts.filter(a=>cat==="general"?a.purpose==="general":a.purpose!=="general");
@@ -1211,7 +1244,7 @@ async function libraryTab(){
   ${["quiz","reading"].includes(a.kind)?`<button class="soft" data-act="libhost" data-id="${a.id}">Host live</button>`:""}<button class="soft" data-act="libres" data-id="${a.id}">Results</button><button class="soft" data-act="libdup" data-id="${a.id}">Duplicate</button><button class="outline danger" data-act="libdel" data-id="${a.id}">Delete</button></div></div>`};
  const groups=cat==="general"?[["general",shown]].filter(g=>g[1].length):Object.keys(PURPOSE).filter(p=>p!=="general").map(p=>[p,shown.filter(a=>a.purpose===p)]).filter(g=>g[1].length);
  return `<div class="head"><div class="eyebrow">MY LIBRARY</div><h1>Activities and content</h1><p>${cat==="general"?"Ordinary quizzes for everyday practice — kept separate from the main research sequence.":"Create, preview, publish and remove everything students see in the research steps."}</p></div>
- <div class="seg" style="margin-bottom:16px">${[["research","Research activities"],["general","Normal quizzes"]].map(x=>`<button data-act="libcat" data-c="${x[0]}" class="${cat===x[0]?"on":""}">${x[1]}</button>`).join("")}</div>
+ <div class="seg" style="margin-bottom:16px">${[["research","Research activities"],["general","Normal quizzes"],["guestdata","Guest Live Quiz data"]].map(x=>`<button data-act="libcat" data-c="${x[0]}" class="${cat===x[0]?"on":""}">${x[1]}</button>`).join("")}</div>
  <div class="createbar">${[["quiz","✎","Quiz","Multiple choice, true/false, assertion-reason, matching"],["reading","☰","Reading passage","A passage with questions beside it"],["flashcards","❏","Flashcards","Term on the front, meaning on the back"],["questionnaire","◔","Questionnaire","Statements on a five-point scale"]].map(c=>`<button class="createtile" data-act="libnew" data-k="${c[0]}" data-cat="${cat}"><i>${c[1]}</i><b>${c[2]}</b><span>${c[3]}</span></button>`).join("")}</div>
  <div class="row" style="margin:18px 0 10px"><div class="seg">${[["all","All"],["draft","Drafts"],["published","Published"]].map(x=>`<button data-act="libf" data-f="${x[0]}" class="${f===x[0]?"on":""}">${x[1]} (${pool.filter(a=>x[0]==="all"||a.status===x[0]).length})</button>`).join("")}</div>${cat==="research"?'<button class="soft" data-act="rview" data-v="perf">Students by performance</button>':""}</div>
  ${groups.map(([p,list])=>cat==="general"?`<div class="stack">${list.map(row).join("")}</div>`:`<h3 class="libh">${PURPOSE[p]}</h3><div class="stack">${list.map(row).join("")}</div>`).join("")||`<div class="empty">${cat==="general"?"No normal quizzes yet. Choose a type above to create one — it won't be part of the research sequence.":"Nothing here yet. Choose a type above to create your first activity."}</div>`}`}
@@ -1276,6 +1309,7 @@ async function perfPage(){
 Object.assign(ACT,{
  libnew(el){newED(el.dataset.k,el.dataset.cat);setR({view:"edit",id:null})},
  libcat(el){setR({lcat:el.dataset.c,f:"all"})},
+ lgdatareport(el){setR({lcat:"guestdata",view:"guestreport",gid:el.dataset.id,gkind:el.dataset.k})},
  async libedit(el){await loadED(el.dataset.id);setR({view:"edit",id:el.dataset.id})},
  async libprev(el){await loadED(el.dataset.id);RUN.st=null;setR({view:"preview",id:el.dataset.id})},
  libf(el){setR({f:el.dataset.f})},libres(el){setR({view:"results",id:el.dataset.id})},
@@ -1425,7 +1459,7 @@ async function hostPage(){
  S.after=lgLoop;const pl=LG.players;
  if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ · ${esc(g.title||"")}</div><p>Students open <b>Live class</b> on the website and type this code</p><div class="lg-code">${g.code.split("").join("<i></i>")}</div>
   <div class="lg-players"><b>${pl.length}</b> joined${pl.length?`<div class="namecloud">${pl.map(p=>`<span>${esc(p.name||"")}</span>`).join("")}</div>`:""}</div><div class="actions"><button class="primary big-btn" data-act="lgstep" data-a="next" ${pl.length?"":"disabled"}>Start quiz</button><button class="outline" data-act="lgstep" data-a="end">Cancel</button></div></div>`;
- if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>Final results</h1>${podium(pl,10)}<div class="actions"><button class="primary" data-act="lgclose">Back to My library</button>${g.collect_profile?`<button class="soft" data-act="lgcsv" data-id="${g.id}">Download guest data (CSV)</button>`:""}</div></div><div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`;
+ if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>Final results</h1>${podium(pl,10)}<div class="actions"><button class="primary" data-act="lgclose">Back to My library</button>${g.collect_profile?`<button class="soft" data-act="lgcsv" data-id="${g.id}">Download guest data (CSV)</button>${LG.report?"":`<button class="soft" data-act="lgreport" data-id="${g.id}">View guest data report</button>`}`:""}</div>${g.collect_profile&&LG.report?guestReportHTML(LG.report):""}</div><div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`;
  const answered=g.phase==="reveal"?null:"";
  return `<div class="lg-stage"><div class="row"><span class="badge">Question ${g.q_index+1} of ${g.n}</span>${g.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(lgLeft(g))}</b>s</span>`:'<span class="badge">Answer</span>'}<span class="muted small">${pl.length} players</span></div>
   ${g.phase==="question"?`<div class="bar lgbar"><i id="lgBar" style="width:${100*lgLeft(g)/g.seconds}%"></i></div>`:""}${lgQuestion(g)}
@@ -1460,12 +1494,38 @@ async function joinLiveQuiz(code){ /* true when the code belonged to a live quiz
   await lgPull();S={page:"play"};render()};
  if(look.data.collect_profile){demoForm(name,doJoin);return true}
  await doJoin(null);return true}
+/* confidence (1-10) bucketed into three bands for the overall report. */
+const confBand=v=>v==null?null:v<=3?"Low confidence":v<=7?"Neutral":"High confidence";
+/* shared "Guest Live Quiz data" report table + overall summary, used on the live-quiz
+   ended screen and from the My library > Guest Live Quiz data tab. rows come from the
+   live_guest_csv RPC (host-only; exact marks, not the gamified score). */
+function guestReportHTML(rows,total){
+ const withConf=rows.filter(r=>r.avg_confidence!=null);
+ const bandCounts={"Low confidence":0,"Neutral":0,"High confidence":0};
+ withConf.forEach(r=>bandCounts[confBand(r.avg_confidence)]++);
+ const avgMarks=rows.length?mean(rows.map(r=>r.marks||0)):0;
+ const avgConf=withConf.length?mean(withConf.map(r=>r.avg_confidence)):null;
+ const tot=total??rows.find(r=>r.total!=null)?.total;
+ return `<div class="card stack" style="margin-top:18px;text-align:left">
+  <h3>Overall report</h3>
+  <div class="form-grid">
+   <div class="statbox"><b>${fx(avgMarks,1)}${tot?` / ${tot}`:""}</b><span>Average marks</span></div>
+   <div class="statbox"><b>${avgConf==null?"-":fx(avgConf,1)}</b><span>Overall confidence (1-10)</span></div>
+   <div class="statbox"><b>${bandCounts["Low confidence"]}</b><span>Low confidence (1-3)</span></div>
+   <div class="statbox"><b>${bandCounts["Neutral"]}</b><span>Neutral (4-7)</span></div>
+   <div class="statbox"><b>${bandCounts["High confidence"]}</b><span>High confidence (8-10)</span></div>
+  </div>
+  <h3>Participants (${rows.length})</h3>
+  <div style="overflow:auto"><table><thead><tr><th>Name</th><th>Guest</th><th>Marks</th><th>Subject</th><th>Study level</th><th>Year</th><th>Rural/Urban</th><th>Gender</th><th>Native</th><th>Consent</th><th>Confidence (1-10)</th><th>Band</th></tr></thead><tbody>
+  ${rows.map(p=>`<tr><td>${esc(p.name||"")}</td><td>${p.is_guest?"Yes":"No"}</td><td>${p.marks??"-"}${p.total?` / ${p.total}`:""}</td><td>${esc(p.g_subject||"-")}</td><td>${esc(p.g_study_level||"-")}</td><td>${p.g_year??"-"}</td><td>${esc(p.g_locality||"-")}</td><td>${esc(p.g_gender||"-")}</td><td>${esc(p.g_native||"-")}</td><td>${p.g_consent?"Yes":"No"}</td><td>${p.avg_confidence??"-"}</td><td>${confBand(p.avg_confidence)||"-"}</td></tr>`).join("")||'<tr><td colspan="12" class="muted">No participants yet.</td></tr>'}
+  </tbody></table></div></div>`}
 Object.assign(ACT,{
  async libhost(el){const g=await rpc("live_host",{p_activity:el.dataset.id,p_seconds:20});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},
  async lgstep(el){if(el.dataset.a==="end"&&!confirm("End this live quiz now?"))return;await rpc("live_step",{p_game:LG.id,p_action:el.dataset.a});await lgPull();if(el.dataset.a==="end"&&LG.game?.q_index<0){stopTimers();LG=null;return setR({})}render()},
+ async lgreport(el){const rows=await rpc("live_guest_csv",{p_game:el.dataset.id});LG.report=rows;render()},
  async lgcsv(el){const gid=el.dataset.id;const rows=await rpc("live_guest_csv",{p_game:gid});
-  download(`live_quiz_guests_${gid.slice(0,8)}.csv`,[csvLine(["Name","Guest","Score","Subject","Study level","Year","Rural/Urban","Gender","Native","Consent","Avg confidence (1-10)"]),
-   ...rows.map(p=>csvLine([p.name||"",p.is_guest?"Yes":"No",p.score,p.g_subject||"",p.g_study_level||"",p.g_year||"",p.g_locality||"",p.g_gender||"",p.g_native||"",p.g_consent?"Yes":"No",p.avg_confidence??""]))].join("\n"))},
+  download(`live_quiz_guests_${gid.slice(0,8)}.csv`,[csvLine(["Name","Guest","Marks","Total","Subject","Study level","Year","Rural/Urban","Gender","Native","Consent","Avg confidence (1-10)","Confidence band"]),
+   ...rows.map(p=>csvLine([p.name||"",p.is_guest?"Yes":"No",p.marks,p.total,p.g_subject||"",p.g_study_level||"",p.g_year||"",p.g_locality||"",p.g_gender||"",p.g_native||"",p.g_consent?"Yes":"No",p.avg_confidence??"",confBand(p.avg_confidence)||""]))].join("\n"))},
  lgclose(){stopTimers();LG=null;setR({})},lgleave(){stopTimers();const g=LG?.guest;LG=null;try{sessionStorage.removeItem("llc_guest")}catch{};if(g||S.page==="play"){S={page:"join"};render()}else setR({})},
  async lgpick(el){if(LG.picked!=null)return;LG.picked=+el.dataset.v;render();
   if(LG.game?.ask_confidence)return; /* wait for the confidence tap before sending */
