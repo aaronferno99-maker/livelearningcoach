@@ -1,6 +1,6 @@
 "use strict";
 /* LIVE LANGUAGE COACH  v2  - Supabase-backed. Replace item banks / portfolio text below with your own. */
-const CONFIG={url:"https://avgvvalqhpykrrteioxa.supabase.co",key:"sb_publishable_ctSsHTh3o8KmtsNWxxJX-g_AFZUEpgI"};
+const CONFIG={url:"https://kjeuwzwbthgzvssiwrqk.supabase.co",key:"sb_publishable_ef0XW6YElc27l5p8D_LHwA_xPTmn8JK"};
 const SK=["Listening","Speaking","Reading","Writing","Grammar","Vocabulary"];
 const PORTFOLIO={
  researcher:{name:"Maria Kaisar Aaron R",role:"PhD Research Scholar, English",inst:"St. Joseph's College (Autonomous), Tiruchirappalli · Bharathidasan University",
