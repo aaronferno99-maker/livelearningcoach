@@ -1385,15 +1385,23 @@ async function lgPull(){if(!LG)return false;let ch=false;
   LG.game=g.data;LG.players=(pl.data||[]).sort((a,b)=>b.score-a.score);LG.count=LG.players.length;return ch}
  const r=await db.rpc("live_state",LG.guest?{p_game:LG.id,p_player:LG.player,p_token:LG.token}:{p_game:LG.id});if(r.error||!r.data)return false;const d=r.data;
  ch=!LG.game||d.game.phase!==LG.game.phase||d.game.q_index!==LG.game.q_index||d.count!==LG.count;
- if(ch&&d.game.phase==="question"&&(!LG.game||LG.game.q_index!==d.game.q_index))LG.picked=null;
+ if(ch&&d.game.phase==="question"&&(!LG.game||LG.game.q_index!==d.game.q_index)){LG.picked=null;LG.matchSel=null;LG.matchSent=false}
  LG.skew=new Date(d.server_now).getTime()-Date.now();LG.game=d.game;LG.players=d.players;LG.me=d.me;LG.mine=d.mine;LG.count=d.count;return ch}
 function lgLoop(){stopTimers();every(1500,async()=>{if(!LG)return stopTimers();try{if(await lgPull())render();else lgTick()}catch{}});every(250,lgTick)}
 function lgTick(){const g=LG?.game;if(!g||g.phase!=="question")return;const l=lgLeft(g),b=$("lgBar"),t=$("lgSec");if(b)b.style.width=(100*l/g.seconds)+"%";if(t)t.textContent=Math.ceil(l);
  if(l<=0&&isStaff()&&!LG.auto){LG.auto=true;rpc("live_step",{p_game:LG.id,p_action:"reveal"}).then(()=>{LG.auto=false;lgPull().then(render)}).catch(()=>LG.auto=false)}}
-const podium=(pl,n=5)=>`<ol class="board">${pl.slice(0,n).map((p,i)=>`<li class="${p.me||(user&&p.student_id===user.id)?"me":""}"><span>${["🥇","🥈","🥉"][i]||i+1}</span><b>${esc(p.name||"Player")}${p.is_guest?' <small class="guesttag">guest</small>':""}</b><em>${p.score}</em></li>`).join("")||'<li class="muted">No players yet</li>'}</ol>`;
+/* show every player who has joined, not just the top few, so none of their names or scores go missing on the host's screen */
+const podium=(pl,n=Infinity)=>`<ol class="board">${pl.slice(0,n).map((p,i)=>`<li class="${p.me||(user&&p.student_id===user.id)?"me":""}"><span>${["🥇","🥈","🥉"][i]||i+1}</span><b>${esc(p.name||"Player")}${p.is_guest?' <small class="guesttag">guest</small>':""}</b><em>${p.score}</em></li>`).join("")||'<li class="muted">No players yet</li>'}</ol>`;
 function lgQuestion(g,opts={}){const q=g.current;if(!q)return "";const labels=q.type==="tf"?["True","False"]:q.type==="ar"?AR_OPTS:q.options||[];const rv=g.phase==="reveal"?g.reveal:null;const tot=rv?Object.values(rv.counts||{}).reduce((a,b)=>a+b,0):0;
  const stem=q.type==="ar"?`<div class="ar"><b>Assertion (A)</b> ${esc(q.assertion)}</div><div class="ar"><b>Reason (R)</b> ${esc(q.reason)}</div>`:esc(q.q||"");
- if(q.type==="match")return `<div class="lg-q">${stem}</div><div class="card">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><b>${rv?esc(q.right[rv.answer[i]]):"?"}</b></div>`).join("")}<p class="muted small">Matching questions are discussed together in a live quiz.</p></div>`;
+ if(q.type==="match"){
+  const myAns=(LG?.mine||[]).find(a=>a.q_index===g.q_index);
+  if(rv)return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><b>${esc(q.right[rv.answer[i]])}</b></div>`).join("")}</div></div>${rv.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`;
+  if(opts.play){
+   if(myAns||LG.matchSent)return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map(l=>`<div class="mrow"><span>${esc(l)}</span><b>…</b></div>`).join("")}</div></div>`;
+   const sel=LG.matchSel||(LG.matchSel=Array(q.left.length).fill(null));const done=sel.every(x=>x!=null);
+   return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><select data-chg="lgmatchpick" data-li="${i}"><option value="">Choose…</option>${q.right.map((r,ri)=>`<option value="${ri}" ${sel[i]===ri?"selected":""}>${esc(r)}</option>`).join("")}</select></div>`).join("")}</div></div><button type="button" class="primary big-btn" data-act="lgmatchsend" ${done?"":"disabled"}>Submit matches</button>`}
+  return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map(l=>`<div class="mrow"><span>${esc(l)}</span><b>?</b></div>`).join("")}</div></div><p class="muted small">Students match each item on their own phones.</p>`}
  return `<div class="lg-q">${stem}</div><div class="tiles big t${labels.length}">${labels.map((o,i)=>{const c=rv?(rv.counts?.[String(i)]||0):0;const cls=rv?(rv.answer===i?" right":" dim"):(LG.picked===i?" picked":LG.picked!=null?" dim":"");
   return `<button type="button" class="tile c${i%4}${cls}" ${opts.play&&!rv&&LG.picked==null?`data-act="lgpick" data-v="${i}"`:"disabled"}><span>${"ABCD"[i]}</span>${esc(o)}${rv?`<em class="cnt">${c}${tot?` · ${Math.round(100*c/tot)}%`:""}</em>`:""}</button>`}).join("")}</div>${rv?.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`}
 async function hostPage(){
@@ -1417,7 +1425,7 @@ function playPage(){
  if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ</div><h1>You're in!</h1><p class="muted">${esc(g.title||"")}</p>${who}<div class="lg-wait"><span></span><span></span><span></span></div><p>Waiting for the quiz to start. ${LG.count||0} joined so far.</p></div>`;
  if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>${rank===1?"You won! 🏆":rank?`You finished #${rank}`:"Finished"}</h1><p class="muted">${meRow?.score||0} points</p>${podium(pl)}<div class="actions"><button class="primary" data-act="lgleave">Done</button></div></div>${rank&&rank<=3?`<div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`:""}`;
  const my=(LG.mine||[]).find(a=>a.q_index===g.q_index);
- const status=g.phase==="reveal"?`<div class="fb ${my?.correct?"good":"bad"} lg-result"><b>${my?(my.correct?`✓ Correct! +${my.points} points`:"✗ Not this time"):"⏱ No answer"}</b><span>Your score: ${meRow?.score||0}${rank?` · position #${rank}`:""}</span></div>`:(LG.picked!=null||my)?'<div class="fb lg-result"><b>Answer locked in</b><span>Wait for the result…</span></div>':"";
+ const status=g.phase==="reveal"?`<div class="fb ${my?.correct?"good":"bad"} lg-result"><b>${my?(my.correct?`✓ Correct! +${my.points} points`:"✗ Not this time"):"⏱ No answer"}</b><span>Your score: ${meRow?.score||0}${rank?` · position #${rank}`:""}</span></div>`:(LG.picked!=null||LG.matchSent||my)?'<div class="fb lg-result"><b>Answer locked in</b><span>Wait for the result…</span></div>':"";
  if(my&&LG.picked==null)LG.picked=-1;
  return `<div class="lg-stage"><div class="row"><span class="badge">Question ${g.q_index+1} of ${g.n}</span>${g.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(lgLeft(g))}</b>s</span>`:""}<span class="muted small">${meRow?.score||0} pts</span></div>
  ${g.phase==="question"?`<div class="bar lgbar"><i id="lgBar" style="width:${100*lgLeft(g)/g.seconds}%"></i></div>`:""}${lgQuestion(g,{play:true})}${status}</div>`}
@@ -1437,7 +1445,10 @@ Object.assign(ACT,{
  async libhost(el){const g=await rpc("live_host",{p_activity:el.dataset.id,p_seconds:20});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},
  async lgstep(el){if(el.dataset.a==="end"&&!confirm("End this live quiz now?"))return;await rpc("live_step",{p_game:LG.id,p_action:el.dataset.a});await lgPull();if(el.dataset.a==="end"&&LG.game?.q_index<0){stopTimers();LG=null;return setR({})}render()},
  lgclose(){stopTimers();LG=null;setR({})},lgleave(){stopTimers();const g=LG?.guest;LG=null;try{sessionStorage.removeItem("llc_guest")}catch{};if(g||S.page==="play"){S={page:"join"};render()}else setR({})},
- async lgpick(el){if(LG.picked!=null)return;LG.picked=+el.dataset.v;render();try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:LG.picked}):rpc("live_answer",{p_game:LG.id,p_answer:LG.picked}));try{playFeedbackSound(true)}catch{}}catch(e){}}});
+ async lgpick(el){if(LG.picked!=null)return;LG.picked=+el.dataset.v;render();try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:LG.picked}):rpc("live_answer",{p_game:LG.id,p_answer:LG.picked}));try{playFeedbackSound(true)}catch{}}catch(e){}},
+ async lgmatchsend(){const sel=LG.matchSel;if(!sel||sel.some(x=>x==null))return toast("Match every item first.");if(LG.matchSent)return;LG.matchSent=true;render();
+  try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:sel}):rpc("live_answer",{p_game:LG.id,p_answer:sel}));try{playFeedbackSound(true)}catch{}}catch(e){LG.matchSent=false;toast(e.message||"Could not send your answer.");render()}}});
+CHG.lgmatchpick=el=>{const li=+el.dataset.li;const sel=LG.matchSel||(LG.matchSel=[]);sel[li]=el.value===""?null:+el.value;render()};
 
 /* =====================================================================
    v6 MODULE: statistics, SPSS export, Google Sheet sync, tab wiring
