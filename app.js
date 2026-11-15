@@ -1017,8 +1017,11 @@ const RUN={st:null,
  quiz(){const s=RUN.st,a=s.act,n=a.questions.length,i=s.i,q=a.questions[i],given=s.ans[i],fb=s.fb[i],answered=Object.keys(s.ans).filter(k=>s.ans[k]!=null&&!(Array.isArray(s.ans[k])&&s.ans[k].some(x=>x==null))).length;
   const lockedQ=s.learn&&!!fb;
   const fbBox=fb?`<div class="fb ${fb.correct?"good":"bad"}"><b>${fb.correct?"✓ Correct":"✗ Not quite"}</b>${fb.correct?"":`<div>Correct answer: <b>${esc(RUN.ansText(q,fb.answer))}</b></div>`}${fb.explanation&&(!fb.correct||s.preview)?`<div class="expl"><b>Explanation.</b> ${esc(fb.explanation)}</div>`:""}</div>`:"";
-  const nav=s.learn
-   ?`<div class="actions">${fb||s.resumed&&given!=null?`<button class="primary" data-act="${i<n-1?"qnext":"qfinish"}">${i<n-1?"Next question →":s.preview?"End preview":"Finish and see my score"}</button>`:""}</div>`
+  const nav=s.preview
+   ?`<div class="actions"><button class="outline" data-act="qprev" ${i===0?"disabled":""}>← Previous</button>${i<n-1?`<button class="primary" data-act="qnext">Next →</button>`:`<button class="primary" data-act="qfinish">End preview</button>`}</div>
+     <div class="palette">${a.questions.map((_,j)=>`<button type="button" data-act="qgo" data-i="${j}" class="${j===i?"cur":""} ${s.ans[j]!=null?"ans":""}">${j+1}</button>`).join("")}</div>`
+   :s.learn
+   ?`<div class="actions">${fb||s.resumed&&given!=null?`<button class="primary" data-act="${i<n-1?"qnext":"qfinish"}">${i<n-1?"Next question →":"Finish and see my score"}</button>`:""}</div>`
    :`<div class="actions"><button class="outline" data-act="qprev" ${i===0?"disabled":""}>← Previous</button>${i<n-1?`<button class="primary" data-act="qnext">Next →</button>`:`<button class="primary" data-act="qfinish">Submit test (${answered}/${n} answered)</button>`}</div>
      <div class="palette">${a.questions.map((_,j)=>`<button type="button" data-act="qgo" data-i="${j}" class="${j===i?"cur":""} ${s.ans[j]!=null?"ans":""}">${j+1}</button>`).join("")}</div>`;
   const qcard=`<div class="card qcard"><div class="row"><span class="badge">Question ${i+1} of ${n}</span><span class="muted small">${({mcq:"Multiple choice",tf:"True or false",ar:"Assertion and reason",match:"Match the following"})[q.type]||""}</span></div><div class="bar"><i style="width:${Math.round(100*(i+(fb||(!s.learn&&given!=null)?1:0))/n)}%"></i></div>${RUN.qbody(q,i,given,lockedQ)}${fbBox}${nav}</div>`;
