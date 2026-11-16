@@ -1191,15 +1191,33 @@ const qLabel=q=>q.q||q.assertion||"Match the following";
 const typeName={mcq:"Multiple choice",tf:"True / False",ar:"Assertion & reason",match:"Match the following",likert:"Statement (1–5)"};
 
 const libSeg=cur=>`<div class="seg" style="margin-bottom:16px">${[["research","Research activities"],["general","Normal quizzes"],["guestdata","Guest Live Quiz data"]].map(x=>`<button data-act="libcat" data-c="${x[0]}" class="${cur===x[0]?"on":""}">${x[1]}</button>`).join("")}</div>`;
+/* Shared library row: the same Edit / Preview / Publish / Host live / Results / Duplicate /
+   Delete controls everywhere an activity is listed. `extra` appends more buttons (used by
+   the Guest Live Quiz data tab to add "View guest data report" alongside them). */
+function libRow(a,cnt={},extra=""){const n=a.kind==="flashcards"?a.cards.length:a.questions.length,tg=null;
+ return `<div class="card lib-row"><div class="lib-main"><div class="row"><b>${esc(a.title)}</b><span class="chip ${a.status==="published"?"c-Completed":"c-Inprogress"}">${a.status==="published"?"Published":"Draft"}</span></div>
+ <div class="muted small">${KIND[a.kind]}${a.skill?" · "+a.skill:""}${a.segment?" · "+a.segment:""} · ${n} ${a.kind==="flashcards"?"cards":a.kind==="questionnaire"?"statements":"questions"}${tg&&a.kind!=="flashcards"?` (target ${tg})`:""} · ${(cnt[a.id]?.size)||0} students completed</div></div>
+ <div class="lib-acts"><button class="soft" data-act="libedit" data-id="${a.id}">Edit</button><button class="soft" data-act="libprev" data-id="${a.id}">Preview</button><button class="soft" data-act="libpub" data-id="${a.id}" data-s="${a.status==="published"?"draft":"published"}">${a.status==="published"?"Unpublish":"Publish"}</button>
+ ${["quiz","reading"].includes(a.kind)?`<button class="soft" data-act="libhost" data-id="${a.id}">Host live</button>`:""}<button class="soft" data-act="libres" data-id="${a.id}">Results</button><button class="soft" data-act="libdup" data-id="${a.id}">Duplicate</button><button class="outline danger" data-act="libdel" data-id="${a.id}">Delete</button>${extra}</div></div>`}
 /* "Guest Live Quiz data" folder: every live quiz / poll / wordcloud / open-response session
-   this teacher turned on guest-detail collection for, across every activity. */
+   this teacher turned on guest-detail collection for, across every activity. Live-quiz rows
+   carry the same Edit/Preview/Host live/etc. controls as the rest of My library, plus a
+   "View guest data report" button; session rows (polls/wordclouds/open-response) only get
+   the report button, since they aren't editable library activities. */
 async function guestDataListPage(){
  const rows=await rpc("my_guest_quizzes");
+ const actIds=new Set(rows.filter(s=>s.kind==="live_quiz"&&s.activity_id).map(s=>s.activity_id));
+ const acts={};
+ if(actIds.size){(await ok(db.from("activities").select("*"))).forEach(a=>{if(actIds.has(a.id))acts[a.id]=a})}
  return `<div class="head"><div class="eyebrow">MY LIBRARY</div><h1>Guest Live Quiz data</h1><p>Demographic details and consent collected from participants, for every live quiz or session where you turned that on.</p></div>
  ${libSeg("guestdata")}
- <div class="stack">${rows.map(s=>`<div class="card lib-row"><div class="lib-main"><div class="row"><b>${esc(s.title||"Untitled")}</b><span class="chip ${s.is_open?"c-Inprogress":"c-Completed"}">${s.is_open?"Open":"Ended / closed"}</span></div>
+ <div class="stack">${rows.map(s=>{
+  const reportBtn=`<button class="soft" data-act="lgdatareport" data-id="${s.id}" data-k="${s.kind}">View guest data report</button>`;
+  const act=s.kind==="live_quiz"?acts[s.activity_id]:null;
+  if(act)return libRow(act,{},reportBtn);
+  return `<div class="card lib-row"><div class="lib-main"><div class="row"><b>${esc(s.title||"Untitled")}</b><span class="chip ${s.is_open?"c-Inprogress":"c-Completed"}">${s.is_open?"Open":"Ended / closed"}</span></div>
   <div class="muted small">${s.kind==="live_quiz"?"Live quiz":"Session"} · Code ${esc(s.code)} · ${s.n_participants} participant(s) · ${fmtDT(s.created_at)}</div></div>
-  <div class="lib-acts"><button class="soft" data-act="lgdatareport" data-id="${s.id}" data-k="${s.kind}">View report</button></div></div>`).join("")||'<div class="empty">No guest details collected yet. Turn on "Collect each participant\'s details" when you host a live quiz, poll, wordcloud or open-response session.</div>'}</div>`}
+  <div class="lib-acts">${reportBtn}</div></div>`}).join("")||'<div class="empty">No guest details collected yet. Turn on "Collect each participant\'s details" when you host a live quiz, poll, wordcloud or open-response session.</div>'}</div>`}
 async function guestReportPage(id,kind){
  if(kind==="live_quiz"){
   const rows=await rpc("live_guest_csv",{p_game:id});
@@ -1237,11 +1255,7 @@ async function libraryTab(){
  const cnt={};atts.filter(a=>a.status==="done").forEach(a=>(cnt[a.activity_id]=cnt[a.activity_id]||new Set()).add(a.student_id));
  const pool=acts.filter(a=>cat==="general"?a.purpose==="general":a.purpose!=="general");
  const f=r.f||"all",shown=pool.filter(a=>f==="all"||a.status===f);
- const row=a=>{const n=a.kind==="flashcards"?a.cards.length:a.questions.length,tg=null;
-  return `<div class="card lib-row"><div class="lib-main"><div class="row"><b>${esc(a.title)}</b><span class="chip ${a.status==="published"?"c-Completed":"c-Inprogress"}">${a.status==="published"?"Published":"Draft"}</span></div>
-  <div class="muted small">${KIND[a.kind]}${a.skill?" · "+a.skill:""}${a.segment?" · "+a.segment:""} · ${n} ${a.kind==="flashcards"?"cards":a.kind==="questionnaire"?"statements":"questions"}${tg&&a.kind!=="flashcards"?` (target ${tg})`:""} · ${(cnt[a.id]?.size)||0} students completed</div></div>
-  <div class="lib-acts"><button class="soft" data-act="libedit" data-id="${a.id}">Edit</button><button class="soft" data-act="libprev" data-id="${a.id}">Preview</button><button class="soft" data-act="libpub" data-id="${a.id}" data-s="${a.status==="published"?"draft":"published"}">${a.status==="published"?"Unpublish":"Publish"}</button>
-  ${["quiz","reading"].includes(a.kind)?`<button class="soft" data-act="libhost" data-id="${a.id}">Host live</button>`:""}<button class="soft" data-act="libres" data-id="${a.id}">Results</button><button class="soft" data-act="libdup" data-id="${a.id}">Duplicate</button><button class="outline danger" data-act="libdel" data-id="${a.id}">Delete</button></div></div>`};
+ const row=a=>libRow(a,cnt);
  const groups=cat==="general"?[["general",shown]].filter(g=>g[1].length):Object.keys(PURPOSE).filter(p=>p!=="general").map(p=>[p,shown.filter(a=>a.purpose===p)]).filter(g=>g[1].length);
  return `<div class="head"><div class="eyebrow">MY LIBRARY</div><h1>Activities and content</h1><p>${cat==="general"?"Ordinary quizzes for everyday practice — kept separate from the main research sequence.":"Create, preview, publish and remove everything students see in the research steps."}</p></div>
  <div class="seg" style="margin-bottom:16px">${[["research","Research activities"],["general","Normal quizzes"],["guestdata","Guest Live Quiz data"]].map(x=>`<button data-act="libcat" data-c="${x[0]}" class="${cat===x[0]?"on":""}">${x[1]}</button>`).join("")}</div>
