@@ -453,6 +453,8 @@ Object.assign(FORM,{
 });
 const anxPage=()=>`<div class="head"><div class="eyebrow">QUESTIONNAIRE · ${settings.phase==="post"?"POST":"PRE"}</div><h1>English language anxiety</h1><p>Choose the option that fits you best (1 = strongly disagree, 5 = strongly agree).</p></div><div class="notice">Item wording here is a placeholder. Replace it with your validated instrument and its official scoring before collecting data.</div><form data-form="anx" class="card stack" style="margin-top:12px">${ANX.map((t,i)=>`<div class="qbox"><b>${i+1}. ${esc(t)}</b><div class="likert">${[1,2,3,4,5].map(v=>`<label><input type="radio" name="a${i}" value="${v}" required>${v}</label>`).join("")}</div></div>`).join("")}<button class="primary">Submit</button></form>`;
 
+/* Graphic narrative shelf (static reader in /materials/graphic-narrative/) */
+const GN_SHELF=`<a class="gn-shelf" href="/materials/graphic-narrative/"><img src="/materials/graphic-narrative/cover.webp" alt="" loading="lazy"><div class="gn-info"><span class="gn-kick">GRAPHIC NARRATIVE · 6 EPISODES</span><b>The Varipuliyan</b><small>A coastal sea story told in comic panels. Tap words to learn them, listen to every panel, and take a quiz after each episode.</small><span class="gn-btn">Read now ›</span></div></a>`;
 async function materialsTab(){
  const m=await ok(db.from("materials").select("*").order("created_at",{ascending:false}));
  const staff=["teacher","researcher"].includes(role());
@@ -461,6 +463,7 @@ async function materialsTab(){
  const filter=S.skill;
  const list=vis.filter(x=>!filter||x.skill===filter);
  return `<div class="head"><div class="eyebrow">LIBRARY</div><h1>Learning materials</h1>${filter?`<p>Showing ${filter}. <a href="#" data-act="mat" data-k="">Show all</a></p>`:""}</div>
+ ${GN_SHELF}
  ${staff?`<form data-form="material" class="card stack"><b>Add material</b><div class="form-grid"><label>Title<input name="title" required></label><label>Skill<select name="skill">${SK.map(k=>`<option>${k}</option>`).join("")}</select></label><label>Type<select name="kind">${["PDF","PPT","Audio","Video","Dialogue","Link"].map(k=>`<option>${k}</option>`).join("")}</select></label><label>Link (YouTube, Drive…)<input name="url" type="url" placeholder="https://…"></label></div><label>Or upload a file (PDF, PPT, audio)<input name="file" type="file"></label><button class="primary">Add</button></form>`:""}
  <div class="card" style="margin-top:14px">${list.map(x=>`<div class="activity"><div class="badge">${x.kind}</div><div class="info"><b>${esc(x.title)}</b><small>${x.skill}</small></div><button class="soft" data-act="openmat" data-id="${x.id}">Open</button>${staff?`<button class="outline danger" data-act="delmat" data-id="${x.id}">Remove</button>`:""}</div>`).join("")||'<p class="muted">Nothing here yet.</p>'}</div>`;
 }

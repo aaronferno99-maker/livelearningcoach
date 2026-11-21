@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The Varipuliyan · Graphic narrative · Live Language Coach</title>
+<meta name="description" content="An interactive coastal graphic narrative for English learners: read, listen, tap words and check yourself.">
+<meta name="theme-color" content="#0d1530">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Manrope:wght@700;800&display=swap">
+<style>
+:root{--ink:#19213a;--muted:#6f7a93;--bg:#f5f6fb;--purple:#6558d3;--lav:#efedff;--teal:#13a99b;--line:#e7e9f1;--sea:#0d1530;--sea2:#16224a;--sand:#fff7e6;--gold:#f2b632}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 'DM Sans',system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+button{font:inherit;cursor:pointer;border:0;border-radius:999px;padding:10px 16px;font-weight:700}
+a{color:inherit}
+.hidden{display:none!important}
+h1,h2,h3{font-family:Manrope,sans-serif;letter-spacing:-.3px}
+/* ---------- top bar (series) ---------- */
+.topbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:10px 4vw;font-size:14px}
+.brand{display:flex;align-items:center;gap:8px;text-decoration:none;font:800 15px Manrope;white-space:nowrap}
+.brand b{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#7569e8,#13b6a7);color:#fff;font-size:12px}
+.crumb{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.crumb a{color:var(--purple);text-decoration:none;font-weight:700}
+.spacer{flex:1}
+/* ---------- hero ---------- */
+.hero{position:relative;min-height:330px;color:#fff;display:flex;align-items:flex-end;justify-content:center;text-align:center;overflow:hidden;background:#0d1530}
+.hero::before{content:"";position:absolute;inset:0;background:url(hero.webp) center/cover;filter:saturate(.85)}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,#0d153055 0%,#0d1530aa 55%,#0d1530 100%)}
+.hero .in{position:relative;z-index:1;padding:60px 20px 36px;max-width:760px}
+.genre{color:#8fe9dc;font-weight:700;font-size:14px;letter-spacing:.5px}
+.hero h1{font-size:clamp(38px,7vw,64px);line-height:1.02;margin:6px 0 10px;text-shadow:0 3px 18px #0008}
+.hero .kick{font:700 13px 'DM Sans';letter-spacing:2px;text-transform:uppercase;color:#c9c4ff}
+.credit{font-size:14px;color:#dfe3f3}
+/* ---------- series layout ---------- */
+.wrap{max-width:1120px;margin:-26px auto 60px;position:relative;z-index:2;display:grid;grid-template-columns:1fr 340px;grid-template-areas:"list a" "list b" "list ." ;grid-template-rows:auto auto 1fr;gap:18px 22px;padding:0 16px}
+.wrap>.list{grid-area:list;align-self:start}.wrap>.sideA{grid-area:a}.wrap>.sideB{grid-area:b}
+.box{background:#fff;border:1px solid var(--line);border-radius:18px}
+.listhead{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tabs{display:flex;gap:4px}.tabs button{white-space:nowrap;background:transparent;color:var(--muted);padding:8px 13px}.tabs button.on{background:var(--lav);color:var(--purple)}
+.sort{font-size:14px;color:var(--muted)}.sort button{background:none;padding:4px 6px;color:var(--muted);font-weight:500}.sort button.on{color:var(--ink);font-weight:700}
+.ep{display:flex;align-items:center;gap:16px;padding:10px 20px 10px 10px;border-bottom:1px solid var(--line);text-decoration:none;transition:background .15s}
+.ep:hover{background:#fafbff}.ep:last-child{border-bottom:0}
+.ep img{width:92px;height:92px;border-radius:10px;object-fit:cover;flex:none;background:#dde}
+.ep .t{flex:1;min-width:0}.ep .t b{display:block;font-size:17px}.ep .t small{color:var(--muted);font-size:13px}
+.ep .meta{display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-size:13px;color:var(--muted);text-align:right}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:#e7f8f2;color:#16816e;margin-right:6px}
+.tag.p{background:var(--lav);color:var(--purple)}.tag.g{background:#fff1cf;color:#8a6410}
+.done{color:#16816e;font-weight:700}
+.side .cta{display:grid;gap:10px;padding:18px}
+.btn-dark{background:#151a2c;color:#fff;padding:15px;font-size:16px}.btn-dark:hover{background:#000}
+.btn-line{background:#fff;border:1px solid #cfd3e0;color:var(--ink);padding:13px}
+.btn-p{background:var(--purple);color:#fff}.btn-soft{background:var(--lav);color:var(--purple)}.btn-teal{background:var(--teal);color:#fff}
+.stats{display:flex;gap:18px;padding:0 18px 4px;color:var(--muted);font-size:14px;flex-wrap:wrap}.stats b{color:var(--ink)}
+.about{padding:14px 18px 18px;color:#3b4560;line-height:1.65}
+.how{padding:16px 18px;border-top:1px solid var(--line)}.how h3{margin:0 0 10px;font-size:15px}
+.how li{margin:0 0 8px;font-size:14px;color:#4a5370}.how li b{color:var(--ink)}
+.bar{height:8px;background:#eef0f6;border-radius:20px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#7568e8,#17b2a4)}
+/* glossary & bank */
+.gtools{display:flex;gap:8px;padding:14px 20px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.gtools input{flex:1;min-width:180px;padding:11px 14px;border:1px solid var(--line);border-radius:12px;font:inherit}
+.chipbtn{background:#f1f2f7;color:#4a5370;padding:8px 13px;font-size:13px}.chipbtn.on{background:var(--ink);color:#fff}
+.wrow{display:flex;gap:12px;align-items:flex-start;padding:13px 20px;border-bottom:1px solid var(--line)}
+.wrow .t{flex:1}.wrow b{font-size:16px}.wrow i{color:var(--muted);font-size:13px;margin-left:6px}.wrow p{margin:3px 0 0;color:#4a5370;font-size:14px}
+.ta{font-size:13px;color:#16816e;margin-left:6px}
+.ico{background:#f1f2f7;color:var(--ink);width:38px;height:38px;padding:0;display:grid;place-items:center;font-size:16px;flex:none}
+.ico.on{background:#fff1cf;color:#b07d00}
+.empty{padding:34px 20px;text-align:center;color:var(--muted)}
+/* flashcards */
+.flash{padding:20px;display:grid;gap:14px;justify-items:center}
+.card3d{width:min(420px,100%);height:230px;perspective:900px;cursor:pointer}
+.card3d .in{position:relative;width:100%;height:100%;transition:transform .5s;transform-style:preserve-3d}
+.card3d.flip .in{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;border-radius:18px;display:grid;place-items:center;text-align:center;padding:22px;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.face.f{background:linear-gradient(135deg,#211c58,#5146ad 65%,#138c8b);color:#fff;font:800 30px Manrope}
+.face.f small{display:block;font:500 13px 'DM Sans';opacity:.8;margin-top:6px}
+.face.b{background:var(--sand);transform:rotateY(180deg);font-size:17px;color:#4a3a10}
+/* ---------- reader ---------- */
+body.reading{background:var(--sea)}
+.rbar{position:fixed;top:0;left:0;right:0;z-index:30;background:#0b1229f0;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;transition:transform .25s}
+.rbar.hide{transform:translateY(-100%)}
+.rbar .row{display:flex;align-items:center;gap:8px;padding:9px 12px;max-width:900px;margin:auto}
+.rbar .ttl{flex:1;min-width:0;font-size:14px;line-height:1.25}.rbar .ttl b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rbar .ttl small{color:#9aa6c8}
+.rb{background:#ffffff14;color:#fff;padding:8px 12px;font-size:13px;white-space:nowrap}.rb.on{background:var(--teal)}
+.rb.back{font-size:20px;padding:4px 12px}
+.prog{height:3px;background:#ffffff1a}.prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,#8f84ff,#2fd3c3);transition:width .2s}
+.strip{max-width:690px;margin:0 auto;padding:64px 0 120px}
+.epintro{color:#dfe5ff;text-align:center;padding:34px 20px 26px}
+.epintro .n{font:700 13px 'DM Sans';letter-spacing:2px;color:#8fe9dc;text-transform:uppercase}
+.epintro h2{font-size:clamp(28px,5vw,40px);margin:6px 0;color:#fff}
+.epintro p{margin:6px auto 0;max-width:520px;color:#aeb8d8;font-size:15px}
+.tipbox{margin:16px auto 0;max-width:520px;background:#ffffff10;border:1px solid #ffffff1f;border-radius:14px;padding:12px 14px;font-size:14px;color:#c9d2f0;text-align:left}
+.panel{margin:0 0 14px;scroll-margin-top:60px}
+.panel .art{background:#000;display:flex;justify-content:center}
+.panel img{display:block;max-width:100%;width:auto;height:auto;max-height:90vh;cursor:zoom-in}
+.cap{background:#fff;margin:0 10px;border-radius:0 0 16px 16px;padding:12px 14px 13px;display:flex;gap:12px;align-items:flex-start;position:relative;top:-1px}
+.cap.speaking{box-shadow:0 0 0 3px var(--teal) inset}
+.cap .say{flex:none;width:38px;height:38px;padding:0;display:grid;place-items:center;background:var(--lav);color:var(--purple);font-size:16px}
+.cap .say.on{background:var(--teal);color:#fff}
+.cap .txt{flex:1;font-size:16px;line-height:1.65;color:#222a44}
+.cap .who{font-weight:700;color:var(--purple);font-size:13px;display:block;margin-bottom:1px}
+.cap .scene{font-style:italic;color:#59627d}
+.cap .scene::before{content:"Scene · ";font-style:normal;font-weight:700;color:var(--muted);font-size:12px;letter-spacing:.5px;text-transform:uppercase}
+.cap .reply{display:block;margin-top:5px;padding-left:10px;border-left:3px solid #d9dcf0}
+.w{background:none;border:0;padding:0 1px;border-radius:4px;font:inherit;color:#0b7c71;font-weight:700;border-bottom:2px dotted #13a99b;cursor:pointer;line-height:inherit}
+.w:hover,.w:focus{background:#e2f7f3;outline:none}.w.saved{color:#9a6b00;border-bottom-color:var(--gold)}
+.pics{margin-top:7px;font-size:13px;color:var(--muted)}.pics .w{font-size:14px;margin:0 4px}
+.wordsoff .cap{display:none}
+.wordsoff .panel{margin-bottom:0}
+/* end of episode */
+.end{margin:26px 10px 0;display:grid;gap:16px}
+.endhead{text-align:center;color:#fff;padding:10px 0}
+.endhead h3{margin:4px 0;font-size:26px}.endhead p{color:#aeb8d8;margin:0}
+.like{background:#ffffff14;color:#fff;margin-top:12px;padding:10px 18px}.like.on{background:#ff4d6d}
+.act{background:#fff;border-radius:18px;padding:20px}
+.act h3{margin:0 0 4px;font-size:20px}.act .sub{color:var(--muted);font-size:14px;margin:0 0 14px}
+.q{border-top:1px solid var(--line);padding:14px 0}.q:first-of-type{border-top:0}
+.q p{margin:0 0 9px;font-weight:700}
+.opt{display:block;width:100%;text-align:left;background:#f6f7fb;border:1px solid var(--line);border-radius:12px;margin:7px 0;padding:11px 14px;font-weight:500;color:var(--ink)}
+.opt:hover:not([disabled]){border-color:var(--purple)}
+.opt.right{background:#e7f8f2;border-color:#16a085;color:#0d6b5a;font-weight:700}
+.opt.wrong{background:#ffe9e4;border-color:#e07a62;color:#a33a24}
+.opt[disabled]{cursor:default}
+.ex{font-size:14px;background:var(--sand);color:#6b5414;border-radius:10px;padding:9px 12px;margin-top:6px}
+.score{display:flex;align-items:center;gap:12px;background:var(--lav);border-radius:14px;padding:14px;margin-top:8px;flex-wrap:wrap}
+.score b{font:800 26px Manrope;color:var(--purple)}
+textarea{width:100%;min-height:150px;border:1px solid var(--line);border-radius:12px;padding:12px;font:inherit;line-height:1.6;resize:vertical}
+.wc{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--muted);margin:8px 0;flex-wrap:wrap}
+.used{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.used span{font-size:12px;padding:3px 9px;border-radius:20px;background:#eef0f6;color:#6f7a93}.used span.y{background:#e7f8f2;color:#16816e;font-weight:700}
+.rowbtns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.line{background:var(--sand);border-radius:12px;padding:12px 14px;font-weight:700;margin-bottom:12px;color:#4a3a10}
+audio{width:100%;margin-top:10px}
+.ord{display:grid;gap:8px}.ord button{text-align:left;border-radius:12px;background:#f6f7fb;border:1px solid var(--line);font-weight:500;color:var(--ink);padding:11px 14px}
+.ord button.picked{background:var(--lav);border-color:var(--purple);color:var(--purple)}
+.ord button .n{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--purple);color:#fff;font-size:12px;margin-right:8px}
+.nextcard{display:flex;gap:14px;align-items:center;background:linear-gradient(115deg,#211c58,#5146ad 65%,#138c8b);color:#fff;border-radius:18px;padding:14px;text-decoration:none}
+.nextcard img{width:76px;height:76px;border-radius:12px;object-fit:cover}.nextcard small{color:#c9c4ff}.nextcard b{display:block;font-size:18px}
+.botnav{position:fixed;bottom:0;left:0;right:0;z-index:30;background:#0b1229f0;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:transform .25s;padding-bottom:env(safe-area-inset-bottom)}
+.botnav.hide{transform:translateY(100%)}
+.botnav .row{display:flex;justify-content:space-between;align-items:center;max-width:690px;margin:auto;padding:8px 10px;color:#fff;gap:8px}
+.botnav .rb{min-width:44px}
+/* word sheet */
+.scrim{position:fixed;inset:0;background:#0b1229a0;z-index:50;opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:51;background:#fff;border-radius:22px 22px 0 0;max-width:560px;margin:auto;padding:12px 22px calc(22px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .28s cubic-bezier(.2,.9,.3,1);box-shadow:0 -10px 40px #0004}
+.sheet.on{transform:none}
+.grab{width:42px;height:5px;border-radius:5px;background:#d9dce6;margin:0 auto 12px}
+.sheet h3{font-size:30px;margin:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pos{font:500 14px 'DM Sans';color:var(--muted);font-style:italic}
+.sheet .tamil{color:#16816e;font-weight:700;margin-top:2px}
+.sheet .mean{font-size:18px;margin:12px 0 8px;line-height:1.5}
+.sheet .exs{background:var(--sand);border-radius:12px;padding:11px 14px;color:#5a4712;font-size:15px}
+.sheet .exs b{color:#3d2f05}
+.sheet .seen{font-size:13px;color:var(--muted);margin:10px 0 14px}
+.badge-c{font:700 11px 'DM Sans';padding:3px 9px;border-radius:20px;background:#e2f7f3;color:#0b7c71;letter-spacing:.3px}
+/* zoom */
+.zoom{position:fixed;inset:0;z-index:60;background:#000e;display:none;overflow:auto;cursor:zoom-out}
+.zoom.on{display:block}.zoom img{display:block;width:min(1400px,180vw);max-width:none;margin:auto}
+.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#202743;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;z-index:70;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+footer{text-align:center;color:#9aa2b4;font-size:12px;padding:10px 16px 30px}
+body.reading footer{display:none}
+@media(max-width:900px){.wrap{grid-template-columns:1fr;grid-template-areas:"a" "list" "b";grid-template-rows:auto}}
+@media(max-width:560px){
+ .hero{min-height:280px}.ep{gap:12px;padding-right:12px}.ep img{width:72px;height:72px}.ep .t b{font-size:15px}
+ .ep .meta .num{display:none}.listhead{padding:12px 14px}.wrow,.gtools{padding-left:14px;padding-right:14px}
+ .rbar .lbl{display:none}.tabs button{padding:8px 10px;font-size:14px}.cap{margin:0 6px}.end{margin:22px 6px 0}.act{padding:16px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sw"></div>
+<div class="zoom" id="zoom"><img alt=""></div>
+<div class="toast" id="toast"></div>
+<footer>© 2026 Maria Kaisar Aaron R · Live Language Coach · Neithal Narratives</footer>
+<script src="data.js"></script>
+<script>
+(()=>{
+"use strict";
+const S=window.SERIES,W=window.WORDS,EPS=window.EPISODES,DIM=window.PANEL_DIMS||{};
+const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const app=$("#app");
+/* ---------- storage (per browser) ---------- */
+const KEY="gn_varipuliyan_v1";
+const st=(()=>{let d={};try{d=JSON.parse(localStorage.getItem(KEY))||{}}catch(e){}return Object.assign({read:{},score:{},bank:[],likes:{},last:null,writing:{},prefs:{words:true,rate:.9}},d)})();
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}};
+const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),1800)};
+/* ---------- where each word appears ---------- */
+const SEEN={};EPS.forEach(e=>e.panels.forEach(p=>p.k.forEach(k=>{(SEEN[k]=SEEN[k]||new Set).add(e.id)})));
+const totalPanels=EPS.reduce((n,e)=>n+e.panels.length,0);
+const img=(e,i)=>`panels/ep${e}-${String(i+1).padStart(2,"0")}.webp`;
+/* ---------- speech ---------- */
+const synth=window.speechSynthesis;let voice=null;
+function pickVoice(){if(!synth)return;const v=synth.getVoices();voice=v.find(x=>/en[-_]IN/i.test(x.lang))||v.find(x=>/en[-_]GB/i.test(x.lang))||v.find(x=>/^en/i.test(x.lang))||null}
+if(synth){pickVoice();synth.onvoiceschanged=pickVoice}
+function speak(text,onend){if(!synth){toast("Read-aloud is not supported in this browser.");onend&&onend(false);return}
+ synth.cancel();const u=new SpeechSynthesisUtterance(text.replace(/[“”"]/g,""));if(voice){u.voice=voice;u.lang=voice.lang}else u.lang="en-IN";
+ u.rate=st.prefs.rate||.9;u.onend=()=>onend&&onend(true);u.onerror=()=>onend&&onend(false);synth.speak(u)}
+function stopSpeak(){if(synth)synth.cancel();auto=false;$$(".say.on,.cap.speaking").forEach(x=>x.classList.remove("on","speaking"));const b=$("#autoBtn");if(b){b.classList.remove("on");b.innerHTML='▶ <span class="lbl">Auto-read</span>'}}
+/* ---------- word highlighting ---------- */
+function markup(text,keys){
+ const hits=[];
+ keys.forEach(k=>{const d=W[k];if(!d)return;const forms=[d.w,...(d.f||[])].sort((a,b)=>b.length-a.length);
+  for(const f of forms){const re=new RegExp("(^|[^A-Za-z])("+f.replace(/[.*+?^${}()|[\]\\]/g,"\\$&").replace(/ /g,"\\s+")+")(?![A-Za-z])","i");const m=re.exec(text);
+   if(m){const s=m.index+m[1].length,e=s+m[2].length;if(!hits.some(h=>s<h.e&&e>h.s)){hits.push({s,e,k});return}}}
+  hits.push({k,miss:true})});
+ const inText=hits.filter(h=>!h.miss).sort((a,b)=>a.s-b.s);let out="",i=0;
+ inText.forEach(h=>{out+=esc(text.slice(i,h.s))+wbtn(h.k,text.slice(h.s,h.e));i=h.e});out+=esc(text.slice(i));
+ return {html:out,pics:hits.filter(h=>h.miss).map(h=>h.k)}}
+const wbtn=(k,label)=>`<button class="w${st.bank.includes(k)?" saved":""}" data-w="${k}">${esc(label)}</button>`;
+/* ---------- word sheet ---------- */
+let sheetKey=null;
+function openWord(k){const d=W[k];if(!d)return;sheetKey=k;const saved=st.bank.includes(k);
+ const seen=[...(SEEN[k]||[])].map(n=>"Ep. "+n).join(", ");
+ const ex=esc(d.ex).replace(new RegExp("("+[d.w,...(d.f||[])].map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")","i"),"<b>$1</b>");
+ $("#sheet").innerHTML=`<div class="grab"></div>
+ <h3 id="sw">${esc(d.w)} <span class="pos">${esc(d.pos)}</span>${d.coastal?'<span class="badge-c">COASTAL WORD</span>':""}</h3>
+ ${d.ta?`<div class="tamil">${esc(d.ta)}</div>`:""}
+ <div class="mean">${esc(d.m)}</div>
+ <div class="exs">“${ex}”</div>
+ <div class="seen">${seen?`Appears in ${seen}`:""}</div>
+ <div class="rowbtns"><button class="btn-p" data-act="sayword">🔊 Listen</button><button class="btn-soft" data-act="sayex">🔊 Example</button><button class="${saved?"btn-line":"btn-teal"}" data-act="bank">${saved?"★ Saved":"☆ Save word"}</button><span class="spacer"></span><button class="btn-line" data-act="closesheet">Close</button></div>`;
+ $("#scrim").classList.add("on");$("#sheet").classList.add("on");speak(d.w)}
+function closeSheet(){$("#scrim").classList.remove("on");$("#sheet").classList.remove("on");sheetKey=null}
+function toggleBank(k){const i=st.bank.indexOf(k);if(i>=0)st.bank.splice(i,1);else st.bank.push(k);save();
+ const on=st.bank.includes(k);$$(`.w[data-w="${k}"]`).forEach(b=>b.classList.toggle("saved",on));toast(on?"Saved to your Word bank":"Removed from Word bank");return on}
+/* ---------- router ---------- */
+let route={},auto=false,io=null,lastY=0;
+function go(h){location.hash=h}
+window.addEventListener("hashchange",render);
+function render(){stopSpeak();closeSheet();if(io){io.disconnect();io=null}
+ const h=location.hash.replace(/^#\/?/,"").split("/");
+ if(h[0]==="ep"&&EPS.find(e=>e.id==h[1])){route={v:"ep",id:+h[1],p:h[2]};reader()}
+ else{route={v:"home",tab:["glossary","bank"].includes(h[0])?h[0]:"episodes"};home()}}
+/* ---------- HOME (series page) ---------- */
+let sortNew=false,gq="",gf="all",flash=null;
+function epRow(e){const r=st.read[e.id],sc=st.score[e.id];
+ return `<a class="ep" href="#/ep/${e.id}"><img src="thumbs/ep${e.id}.webp" alt="" loading="lazy" width="92" height="92">
+ <div class="t"><b>Ep. ${e.id} · ${esc(e.title)}</b><small><span class="tag ${e.skill==="Review"?"g":"p"}">${esc(e.skill)}</span>${e.panels.length} panels</small></div>
+ <div class="meta">${r?'<span class="done">✓ Read</span>':'<span>New</span>'}${sc!=null?`<span>Quiz ${sc}/${e.quiz.length}</span>`:""}<span class="num">#${e.id}</span></div></a>`}
+function home(){document.body.classList.remove("reading");
+ const readN=Object.keys(st.read).length,pct=Math.round(readN/EPS.length*100);
+ const cont=st.last&&EPS.find(e=>e.id===st.last.ep);
+ const list=sortNew?[...EPS].reverse():EPS;
+ let body="";
+ if(route.tab==="episodes")body=`${list.map(epRow).join("")}`;
+ if(route.tab==="glossary")body=glossary();
+ if(route.tab==="bank")body=bank();
+ app.innerHTML=`<div class="topbar"><a class="brand" href="/"><b>LL</b><span>Live Language Coach</span></a><span class="crumb">/ <a href="/">Materials</a> / Graphic narrative</span></div>
+ <header class="hero"><div class="in"><div class="kick">${esc(S.kicker)}</div><div class="genre">${esc(S.genre)}</div><h1>${esc(S.title)}</h1><div class="credit">${esc(S.credit)}${S.sourceCredit?" · "+esc(S.sourceCredit):""}</div></div></header>
+ <div class="wrap">
+  <section class="box list">
+   <div class="listhead"><div class="tabs" role="tablist">
+    <button class="${route.tab==="episodes"?"on":""}" data-go="#/">Episodes</button>
+    <button class="${route.tab==="glossary"?"on":""}" data-go="#/glossary">Glossary</button>
+    <button class="${route.tab==="bank"?"on":""}" data-go="#/bank">Word bank (${st.bank.length})</button></div>
+    <span class="spacer"></span>
+    ${route.tab==="episodes"?`<span class="sort"><button class="${sortNew?"on":""}" data-act="sortnew">Newest</button> | <button class="${!sortNew?"on":""}" data-act="sortold">From Ep. 1</button></span>`:""}
+   </div>${body}
+  </section>
+  <aside class="box side sideA">
+   <div class="cta">
+    ${cont?`<button class="btn-dark" data-go="#/ep/${cont.id}/${st.last.p||0}">Continue Ep. ${cont.id}</button><button class="btn-line" data-go="#/ep/1">Read Episode 1</button>`:`<button class="btn-dark" data-go="#/ep/1">Read Episode 1</button>`}
+    <button class="btn-line" data-go="#/bank">★ My word bank · ${st.bank.length}</button>
+   </div>
+   <div class="stats"><span><b>${EPS.length}</b> episodes</span><span><b>${totalPanels}</b> panels</span><span><b>${Object.keys(W).length}</b> words</span></div>
+   <div style="padding:12px 18px 0"><div class="wc" style="margin:0 0 6px"><span>Your progress</span><span>${readN}/${EPS.length} read</span></div><div class="bar"><i style="width:${pct}%"></i></div></div>
+   <div class="about">${esc(S.blurb)}</div></aside>
+  <aside class="box sideB"><div class="how" style="border:0"><h3>How to use</h3><ol style="padding-left:18px;margin:0">${S.howTo.map(([a,b])=>`<li><b>${esc(a)}.</b> ${esc(b)}</li>`).join("")}</ol></div></aside>
+ </div>`;
+ window.scrollTo(0,0)}
+function glossary(){const q=gq.trim().toLowerCase();
+ const keys=Object.keys(W).filter(k=>{const d=W[k];if(gf==="coastal"&&!d.coastal)return false;if(gf==="saved"&&!st.bank.includes(k))return false;
+  return !q||d.w.toLowerCase().includes(q)||d.m.toLowerCase().includes(q)}).sort((a,b)=>W[a].w.localeCompare(W[b].w));
+ return `<div class="gtools"><input id="gq" type="search" placeholder="Search a word or meaning…" value="${esc(gq)}" aria-label="Search glossary">
+  <button class="chipbtn ${gf==="all"?"on":""}" data-gf="all">All</button><button class="chipbtn ${gf==="coastal"?"on":""}" data-gf="coastal">Coastal words</button><button class="chipbtn ${gf==="saved"?"on":""}" data-gf="saved">Saved</button></div>
+  <div id="glist">${keys.map(wrow).join("")||'<div class="empty">No words found.</div>'}</div>`}
+const wrow=k=>{const d=W[k];return `<div class="wrow"><div class="t"><b>${esc(d.w)}</b><i>${esc(d.pos)}</i>${d.ta?`<span class="ta">${esc(d.ta)}</span>`:""}<p>${esc(d.m)}</p></div>
+ <button class="ico" data-say="${esc(d.w)}" aria-label="Listen">🔊</button><button class="ico ${st.bank.includes(k)?"on":""}" data-star="${k}" aria-label="Save">${st.bank.includes(k)?"★":"☆"}</button></div>`};
+function bank(){if(!st.bank.length)return `<div class="empty">Your word bank is empty.<br>While reading, tap an underlined word and press <b>☆ Save word</b>.</div>`;
+ if(flash){const k=flash.list[flash.i],d=W[k];
+  return `<div class="flash"><div class="card3d ${flash.flip?"flip":""}" data-act="flip"><div class="in"><div class="face f"><div>${esc(d.w)}<small>${esc(d.pos)} · tap to turn</small></div></div><div class="face b"><div>${esc(d.m)}${d.ta?`<br><b>${esc(d.ta)}</b>`:""}<br><br><i>“${esc(d.ex)}”</i></div></div></div></div>
+  <div class="rowbtns"><button class="btn-line" data-act="fprev">‹ Back</button><button class="btn-soft" data-say="${esc(d.w)}">🔊</button><span>${flash.i+1} / ${flash.list.length}</span><button class="btn-p" data-act="fnext">Next ›</button></div>
+  <button class="btn-line" data-act="fstop">Close flashcards</button></div>`}
+ return `<div class="gtools"><button class="btn-p" data-act="fstart">▶ Practise with flashcards</button><button class="btn-soft" data-act="fshuffle">🔀 Shuffled</button></div>${st.bank.map(wrow).join("")}`}
+/* ---------- READER ---------- */
+function reader(){document.body.classList.add("reading");
+ const e=EPS.find(x=>x.id===route.id),next=EPS.find(x=>x.id===e.id+1),prev=EPS.find(x=>x.id===e.id-1);
+ const panels=e.panels.map((p,i)=>{const d=DIM[`ep${e.id}-${String(i+1).padStart(2,"0")}`]||[600,900];
+  const m=markup(p.t,p.k),r=p.s2?markup(p.s2,m.pics):null;if(r)m.pics=r.pics;
+  const alt=(p.s?p.s+": ":"")+p.t+(p.s2?" "+p.s2:"");
+  return `<section class="panel" id="p${i}" data-i="${i}"><div class="art"><img src="${img(e.id,i)}" width="${d[0]}" height="${d[1]}" alt="Panel ${i+1}. ${esc(alt)}" loading="${i<2?"eager":"lazy"}" decoding="async"></div>
+  <div class="cap"><button class="say" data-say-panel="${i}" aria-label="Read panel ${i+1} aloud">🔊</button><div class="txt">${p.s?`<span class="who">${esc(p.s)}</span>`:""}<span class="${p.scene?"scene":""}">${m.html}</span>${r?`<span class="reply">${r.html}</span>`:""}
+  ${m.pics.length?`<div class="pics">${p.scene?"Words":"In the picture"}: ${m.pics.map(k=>wbtn(k,W[k].w)).join(" · ")}</div>`:""}</div></div></section>`}).join("");
+ const liked=!!st.likes[e.id];
+ app.innerHTML=`<div class="rbar" id="rbar"><div class="row"><button class="rb back" data-go="#/" aria-label="Back to all episodes">‹</button>
+  <div class="ttl"><b>Ep. ${e.id} · ${esc(e.title)}</b><small>${esc(S.title)} · ${esc(e.skill)}</small></div>
+  <button class="rb ${st.prefs.words?"on":""}" id="wordsBtn" data-act="words" aria-pressed="${st.prefs.words}">Aa <span class="lbl">Words</span></button>
+  <button class="rb" id="autoBtn" data-act="auto">▶ <span class="lbl">Auto-read</span></button>
+  <button class="rb" data-act="rate" id="rateBtn" title="Reading speed">${st.prefs.rate>=1?"1×":st.prefs.rate<=.75?"0.75×":"0.9×"}</button></div>
+  <div class="prog"><i id="prog"></i></div></div>
+ <main class="strip ${st.prefs.words?"":"wordsoff"}" id="strip">
+  <div class="epintro"><div class="n">Episode ${e.id} · ${esc(e.skill)}</div><h2>${esc(e.title)}</h2><p>${esc(e.focus)}</p>
+   ${e.id===1?`<div class="tipbox">👆 Tap any <b style="color:#5fe0d1;border-bottom:2px dotted #5fe0d1">underlined word</b> to see its meaning and hear it. Press 🔊 to listen to a panel, or <b>▶ Auto-read</b> to hear the whole episode.</div>`:""}</div>
+  ${panels}
+  <div class="end" id="end">
+   <div class="endhead"><small style="color:#8fe9dc;letter-spacing:2px;font-weight:700">END OF EPISODE ${e.id}</small><h3>Check your understanding</h3><p>${e.panels.length} panels · ${new Set(e.panels.flatMap(p=>p.k)).size} words</p>
+    <button class="like ${liked?"on":""}" data-act="like">${liked?"♥ Liked":"♡ Like this episode"}</button></div>
+   ${quizHTML(e)}
+   ${e.order?orderHTML(e):""}
+   ${taskHTML(e)}
+   ${next?`<a class="nextcard" href="#/ep/${next.id}"><img src="thumbs/ep${next.id}.webp" alt=""><div><small>Next episode</small><b>Ep. ${next.id} · ${esc(next.title)}</b><small>${esc(next.skill)}</small></div></a>`
+         :`<a class="nextcard" href="#/bank"><div style="padding:6px"><small>You finished the series!</small><b>Revise your Word bank (${st.bank.length}) ›</b></div></a>`}
+  </div>
+ </main>
+ <nav class="botnav" id="botnav"><div class="row">
+  ${prev?`<button class="rb" data-go="#/ep/${prev.id}">‹ Ep. ${prev.id}</button>`:`<span class="rb" style="opacity:.3">‹</span>`}
+  <button class="rb" data-go="#/">☰ Episodes</button><button class="rb" data-act="toend">✎ Quiz</button>
+  ${next?`<button class="rb" data-go="#/ep/${next.id}">Ep. ${next.id} ›</button>`:`<span class="rb" style="opacity:.3">›</span>`}
+ </div></nav>`;
+ // track position + completion
+ io=new IntersectionObserver(es=>es.forEach(x=>{if(!x.isIntersecting)return;const el=x.target;
+  if(el.id==="end"){if(!st.read[e.id]){st.read[e.id]=true;save()}}
+  else{st.last={ep:e.id,p:+el.dataset.i};save()}}),{threshold:.35});
+ $$(".panel,#end").forEach(el=>io.observe(el));
+ const start=route.p!=null?+route.p:0;
+ requestAnimationFrame(()=>{if(start>0){const el=$("#p"+start);el&&el.scrollIntoView()}else window.scrollTo(0,0)});
+ lastY=window.scrollY}
+/* quiz */
+function quizHTML(e){return `<div class="act" id="quiz"><h3>Quick quiz</h3><p class="sub">Choose one answer. You will see why straight away.</p>
+ ${e.quiz.map((q,i)=>`<div class="q" data-q="${i}"><p>${i+1}. ${esc(q.q)}</p>${q.o.map((o,j)=>`<button class="opt" data-opt="${j}">${esc(o)}</button>`).join("")}<div class="exwrap"></div></div>`).join("")}
+ <div class="score hidden" id="score"></div></div>`}
+function answer(btn){const qd=btn.closest(".q"),e=EPS.find(x=>x.id===route.id),q=e.quiz[+qd.dataset.q],j=+btn.dataset.opt;
+ if(qd.dataset.done)return;qd.dataset.done=j===q.a?"1":"0";
+ $$(".opt",qd).forEach((b,k)=>{b.disabled=true;if(k===q.a)b.classList.add("right");else if(k===j)b.classList.add("wrong")});
+ $(".exwrap",qd).innerHTML=`<div class="ex">${j===q.a?"✅ Correct. ":"❌ Not quite. "}${esc(q.e)}</div>`;
+ const all=$$("#quiz .q");if(all.every(x=>x.dataset.done)){const n=all.filter(x=>x.dataset.done==="1").length;
+  const best=Math.max(n,st.score[e.id]??0);st.score[e.id]=best;save();
+  $("#score").classList.remove("hidden");$("#score").innerHTML=`<b>${n}/${e.quiz.length}</b><span style="flex:1">${n===e.quiz.length?"Excellent! Every answer right.":n>=3?"Good work. Re-read the panels you missed.":"Read the episode again and try once more."}${best>n?` Your best: ${best}/${e.quiz.length}.`:""}</span><button class="btn-soft" data-act="retry">↺ Try again</button>`}}
+/* order activity */
+let orderPick=[];
+function orderHTML(e){return `<div class="act" id="order"><h3>Put the story in order</h3><p class="sub">Tap the events in the order they happen.</p><div class="ord" id="ordlist">${shuffle(e.order.map((t,i)=>i)).map(i=>`<button data-ord="${i}">${esc(e.order[i])}</button>`).join("")}</div>
+ <div class="rowbtns" style="margin-top:12px"><button class="btn-line" data-act="ordreset">↺ Start again</button><span id="ordmsg" style="font-weight:700"></span></div></div>`}
+function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function pickOrder(b){if(b.classList.contains("picked"))return;orderPick.push(+b.dataset.ord);b.classList.add("picked");b.insertAdjacentHTML("afterbegin",`<span class="n">${orderPick.length}</span>`);
+ const e=EPS.find(x=>x.id===route.id);if(orderPick.length===e.order.length){const ok=orderPick.filter((v,i)=>v===i).length;
+  $("#ordmsg").textContent=ok===e.order.length?"✅ Perfect order!":`${ok}/${e.order.length} in the right place. Try again.`;
+  $$("#ordlist button").forEach(x=>{const i=+x.dataset.ord,pos=orderPick.indexOf(i);x.style.borderColor=pos===i?"#16a085":"#e07a62"})}}
+/* tasks */
+function taskHTML(e){const t=e.task;if(!t)return"";
+ if(t.type==="write"){const v=st.writing[e.id]||"";return `<div class="act" id="task"><span class="tag p">${esc(e.skill)} task</span><h3 style="margin-top:8px">✍️ ${esc(t.title)}</h3><p class="sub">${esc(t.prompt)}</p>
+  <textarea id="wtext" placeholder="Write here… (saved on this device)">${esc(v)}</textarea>
+  <div class="wc"><span id="wcount">0 words</span><span>Episode words you used:</span></div><div class="used" id="wused"></div>
+  <div class="rowbtns" style="margin-top:12px"><button class="btn-p" data-act="copyw">⧉ Copy my writing</button><button class="btn-soft" data-act="readw">🔊 Listen to my writing</button></div></div>`}
+ return `<div class="act" id="task"><span class="tag p">${esc(e.skill)} task</span><h3 style="margin-top:8px">🎙️ ${esc(t.title)}</h3><p class="sub">${esc(t.prompt)}</p>
+  <div class="line">“${esc(t.line)}”</div>
+  <div class="rowbtns"><button class="btn-soft" data-act="sayline">🔊 Listen first</button><button class="btn-p" data-act="rec" id="recBtn">● Record myself</button><span id="recmsg" class="sub" style="margin:0"></span></div><div id="recout"></div>
+  <p class="sub" style="margin:12px 0 0;font-size:13px">Your recording stays on your phone. It is not uploaded.</p></div>`}
+function updateWriting(){const ta=$("#wtext");if(!ta)return;const e=EPS.find(x=>x.id===route.id);const v=ta.value;st.writing[e.id]=v;save();
+ const n=(v.trim().match(/\S+/g)||[]).length;$("#wcount").textContent=n+(n===1?" word":" words");
+ const keys=[...new Set(e.panels.flatMap(p=>p.k))];
+ $("#wused").innerHTML=keys.map(k=>{const d=W[k];const forms=[d.w,...(d.f||[])];const y=forms.some(f=>new RegExp("\\b"+f.replace(/[.*+?^${}()|[\]\\]/g,"\\$&").replace(/e$/,"e?")+"(s|es|d|ed|ing)?\\b","i").test(v));return `<span class="${y?"y":""}">${y?"✓ ":""}${esc(d.w)}</span>`}).join("")}
+let rec=null,chunks=[];
+async function toggleRec(){const b=$("#recBtn");
+ if(rec&&rec.state==="recording"){rec.stop();return}
+ if(!navigator.mediaDevices||!window.MediaRecorder){$("#recmsg").textContent="Recording is not supported in this browser. Practise aloud instead.";return}
+ try{const s=await navigator.mediaDevices.getUserMedia({audio:true});chunks=[];rec=new MediaRecorder(s);
+  rec.ondataavailable=ev=>chunks.push(ev.data);
+  rec.onstop=()=>{s.getTracks().forEach(t=>t.stop());const url=URL.createObjectURL(new Blob(chunks,{type:rec.mimeType||"audio/webm"}));
+   $("#recout").innerHTML=`<audio controls src="${url}"></audio><p class="sub" style="margin:6px 0 0">Listen to yourself, then press 🔊 to compare with the model. Record again if you like.</p>`;
+   b.textContent="● Record again";b.classList.remove("btn-teal");$("#recmsg").textContent=""};
+  rec.start();b.textContent="■ Stop";b.classList.add("btn-teal");$("#recmsg").textContent="Recording…"}
+ catch(err){$("#recmsg").textContent="Please allow the microphone to record."}}
+/* auto-read */
+function readPanel(i,chain){const e=EPS.find(x=>x.id===route.id);const p=e.panels[i];if(!p){stopSpeak();return}
+ $$(".say.on,.cap.speaking").forEach(x=>x.classList.remove("on","speaking"));
+ const sec=$("#p"+i);const cap=$(".cap",sec),btn=$(".say",sec);cap.classList.add("speaking");btn.classList.add("on");
+ if(chain)sec.scrollIntoView({behavior:"smooth",block:"start"});
+ speak((p.s?p.s+" says: ":"")+p.t+(p.s2?" … "+p.s2:""),ok=>{cap.classList.remove("speaking");btn.classList.remove("on");
+  if(chain&&auto&&ok)setTimeout(()=>auto&&readPanel(i+1,true),500);else if(!ok&&auto){stopSpeak();toast("Read-aloud could not start. Check the phone volume or try Chrome.")}})}
+function startAuto(){const b=$("#autoBtn");if(auto){stopSpeak();return}
+ if(!st.prefs.words){toggleWords()}auto=true;b.classList.add("on");b.innerHTML='■ <span class="lbl">Stop</span>';
+ const cur=st.last&&st.last.ep===route.id?st.last.p:0;readPanel(cur||0,true)}
+function toggleWords(){st.prefs.words=!st.prefs.words;save();$("#strip").classList.toggle("wordsoff",!st.prefs.words);const b=$("#wordsBtn");b.classList.toggle("on",st.prefs.words);b.setAttribute("aria-pressed",st.prefs.words);toast(st.prefs.words?"Words and read-aloud shown":"Pictures only: tap Aa to bring words back")}
+/* ---------- events ---------- */
+document.addEventListener("click",ev=>{const t=ev.target.closest("button,[data-go],.card3d,.panel img,.zoom");if(!t)return;
+ if(t.classList.contains("zoom")){t.classList.remove("on");return}
+ if(t.matches(".panel img")){const z=$("#zoom");$("img",z).src=t.src;z.classList.add("on");return}
+ if(t.dataset.go){ev.preventDefault();go(t.dataset.go);return}
+ if(t.dataset.w){openWord(t.dataset.w);return}
+ if(t.dataset.sayPanel!=null){const i=+t.dataset.sayPanel;if(t.classList.contains("on")){stopSpeak();return}auto=false;readPanel(i,false);return}
+ if(t.dataset.say){speak(t.dataset.say);return}
+ if(t.dataset.star){toggleBank(t.dataset.star);home();return}
+ if(t.dataset.gf){gf=t.dataset.gf;home();return}
+ if(t.dataset.opt!=null){answer(t);return}
+ if(t.dataset.ord!=null){pickOrder(t);return}
+ const a=t.dataset.act;if(!a)return;const e=EPS.find(x=>x.id===route.id);
+ ({sayword:()=>speak(W[sheetKey].w),sayex:()=>speak(W[sheetKey].ex),closesheet:closeSheet,
+  bank:()=>{const k=sheetKey;toggleBank(k);openWord(k);synth&&synth.cancel()},
+  sortnew:()=>{sortNew=true;home()},sortold:()=>{sortNew=false;home()},
+  words:toggleWords,auto:startAuto,
+  rate:()=>{const r=st.prefs.rate;st.prefs.rate=r>=1?.75:r<=.75?.9:1;save();t.textContent=st.prefs.rate>=1?"1×":st.prefs.rate<=.75?"0.75×":"0.9×";toast("Reading speed "+t.textContent)},
+  like:()=>{st.likes[e.id]=!st.likes[e.id];save();t.classList.toggle("on",st.likes[e.id]);t.textContent=st.likes[e.id]?"♥ Liked":"♡ Like this episode"},
+  toend:()=>$("#end").scrollIntoView({behavior:"smooth"}),
+  retry:()=>{$("#quiz").outerHTML=quizHTML(e)},
+  ordreset:()=>{orderPick=[];$("#order").outerHTML=orderHTML(e)},
+  copyw:()=>{const v=$("#wtext").value;if(navigator.clipboard)navigator.clipboard.writeText(v).then(()=>toast("Copied. Paste it where your teacher asks."));else{$("#wtext").select();document.execCommand("copy");toast("Copied")}},
+  readw:()=>{const v=$("#wtext").value.trim();v?speak(v):toast("Write something first.")},
+  sayline:()=>speak(e.task.line),rec:toggleRec,
+  fstart:()=>{flash={list:[...st.bank],i:0,flip:false};home()},fshuffle:()=>{flash={list:shuffle(st.bank),i:0,flip:false};home()},
+  flip:()=>{flash.flip=!flash.flip;$(".card3d").classList.toggle("flip",flash.flip)},
+  fnext:()=>{flash.i=(flash.i+1)%flash.list.length;flash.flip=false;home()},fprev:()=>{flash.i=(flash.i-1+flash.list.length)%flash.list.length;flash.flip=false;home()},
+  fstop:()=>{flash=null;home()}}[a]||(()=>{}))()});
+$("#scrim").addEventListener("click",closeSheet);
+document.addEventListener("keydown",ev=>{if(ev.key==="Escape"){closeSheet();$("#zoom").classList.remove("on")}});
+document.addEventListener("input",ev=>{if(ev.target.id==="gq"){gq=ev.target.value;const keys=Object.keys(W).filter(k=>{const d=W[k];if(gf==="coastal"&&!d.coastal)return false;if(gf==="saved"&&!st.bank.includes(k))return false;const q=gq.trim().toLowerCase();return !q||d.w.toLowerCase().includes(q)||d.m.toLowerCase().includes(q)}).sort((a,b)=>W[a].w.localeCompare(W[b].w));$("#glist").innerHTML=keys.map(wrow).join("")||'<div class="empty">No words found.</div>'}
+ if(ev.target.id==="wtext")updateWriting()});
+/* hide bars while scrolling down (webtoon style), show on scroll up */
+let ticking=false;window.addEventListener("scroll",()=>{if(ticking||route.v!=="ep")return;ticking=true;requestAnimationFrame(()=>{
+ const y=window.scrollY,h=document.documentElement.scrollHeight-innerHeight;const p=$("#prog");if(p)p.style.width=Math.min(100,y/h*100)+"%";
+ const down=y>lastY+6,up=y<lastY-6;if(down&&y>120){$("#rbar")?.classList.add("hide");$("#botnav")?.classList.add("hide")}if(up||y>h-40){$("#rbar")?.classList.remove("hide");$("#botnav")?.classList.remove("hide")}
+ if(Math.abs(y-lastY)>6)lastY=y;ticking=false})},{passive:true});
+window.addEventListener("pagehide",stopSpeak);
+render();
+/* fill writing-task word list once the reader is drawn */
+new MutationObserver(()=>{if($("#wtext")&&!$("#wused").childElementCount)updateWriting()}).observe(app,{childList:true});
+})();
+</script>
+</body>
+</html>
