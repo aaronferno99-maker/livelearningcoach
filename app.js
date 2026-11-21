@@ -14,7 +14,8 @@ const PORTFOLIO={
   short:"Dr. V. L. Jayapaul is Associate Professor and Dean of Languages and Culture at St. Joseph's College (Autonomous), Tiruchirappalli, and supervises this doctoral research at Bharathidasan University.",
   bio:"Associate Professor and Dean of Languages and Culture at St. Joseph's College (Autonomous), Tiruchirappalli. He supervises doctoral research in English at Bharathidasan University and guides this study from design through analysis.",
   edu:[],qual:[],items:[],interests:[]}};
-const CONTACT={email:"mariakaisaraaron@gmail.com",linkedin:"https://www.linkedin.com/in/maria-kaisar-aaron-r-8b3539151",place:"Tiruchirappalli, Tamil Nadu, India"};
+const CONTACT={email:"mariakaisaraaron@gmail.com",linkedin:"https://www.linkedin.com/in/maria-kaisar-aaron-r-8b3539151",whatsapp:"",place:"Tiruchirappalli, Tamil Nadu, India"}; // whatsapp: digits with country code, e.g. "919876543210" (empty = hidden)
+(function(){const f=document.querySelector("footer");if(f&&!f.querySelector(".social-row")){const d=document.createElement("div");d.className="social-row";d.innerHTML=socialLinks();f.prepend(d)}})();
 const PORTALS={student:{label:"Student",icon:"✎",text:"Take your tests, practise the six skills, read feedback and join live classes."},teacher:{label:"Professor",icon:"☰",text:"Unlock skills for your class, score speaking and writing, and send feedback."},researcher:{label:"Researcher",icon:"◉",text:"Manage the study, verify participants, view analytics and export data."}};
 const REC={Listening:"Replay the podcast chapters and answer the chapter questions.",Speaking:"Record a 1-minute talk daily and compare it with the model dialogue.",Reading:"Read one short passage a day and note three new words.",Writing:"Write five sentences daily and revise them using the checklist.",Grammar:"Complete the tense and error-correction exercises again.",Vocabulary:"Review the word bank and use each new word in your own sentence."};
 const BANK={
@@ -292,7 +293,7 @@ function landingSection(sec){
   </div>`;
  }
  if(sec==="purpose")return back+`<div class="head"><div class="eyebrow">THE RESEARCH</div><h2>Purpose &amp; Team</h2></div><div class="card"><p>This study investigates how coastal, place-based narratives, taught through a flipped-classroom design, support undergraduate English learning in Tamil Nadu.</p><div class="notice">Participation is part of an academic research study with informed consent and pseudonymised results.</div></div><div class="grid2" style="grid-template-columns:1fr 1fr;margin-top:14px">${bio(P.researcher,"RESEARCHER")}${bio(P.guide,"RESEARCH GUIDE")}</div>`;
- if(sec==="contact")return back+`<div class="head"><div class="eyebrow">CONTACT</div><h2>Maria Kaisar Aaron R</h2></div><div class="card stack"><p><b>Name:</b> Maria Kaisar Aaron R</p><p><b>Gmail:</b> <a href="mailto:${CONTACT.email}">${CONTACT.email}</a></p><p><b>LinkedIn:</b> <a href="${CONTACT.linkedin}" target="_blank" rel="noopener noreferrer">${CONTACT.linkedin}</a></p><p><b>Institution:</b> St. Joseph's College (Autonomous), ${esc(CONTACT.place)}</p></div>`;
+ if(sec==="contact")return back+`<div class="head"><div class="eyebrow">CONTACT</div><h2>Maria Kaisar Aaron R</h2></div><div class="card stack"><p><b>Name:</b> Maria Kaisar Aaron R</p><p><b>Gmail:</b> <a href="mailto:${CONTACT.email}">${CONTACT.email}</a></p><p><b>LinkedIn:</b> <a href="${CONTACT.linkedin}" target="_blank" rel="noopener noreferrer">${CONTACT.linkedin}</a></p>${CONTACT.whatsapp?`<p><b>WhatsApp:</b> <a href="https://wa.me/${CONTACT.whatsapp}" target="_blank" rel="noopener noreferrer">+${CONTACT.whatsapp}</a></p>`:""}<div class="social-row">${socialLinks()}</div><p><b>Institution:</b> St. Joseph's College (Autonomous), ${esc(CONTACT.place)}</p></div>`;
  if(sec==="copyright")return back+`<div class="head"><div class="eyebrow">COPYRIGHT</div><h2>Copyright and use</h2></div><div class="card"><p>© ${y} Maria Kaisar Aaron R. All rights reserved.</p></div>`;
  return landingHome();
 }
@@ -2119,3 +2120,9 @@ function cbStart(){const w=$("chatbotWidget"),wrap=w?.querySelector(".chatbot-to
  else if(AUTH_ERR){history.replaceState(null,"",location.pathname);setTimeout(()=>toast(/expired|invalid/i.test(AUTH_ERR)?"That link has expired. Please ask for a new password reset link.":AUTH_ERR),300)}
  BOOTED=true;render();
 })();
+
+/* Social links (footer + contact page) */
+function socialLinks(){
+ const li=`<a class="social li" href="${CONTACT.linkedin}" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9h4v12H3zM9 9h3.8v1.7h.1c.5-1 1.8-2 3.8-2 4 0 4.8 2.6 4.8 6V21h-4v-5.4c0-1.3 0-3-1.8-3s-2.1 1.4-2.1 2.9V21H9z"/></svg>LinkedIn</a>`;
+ const wa=CONTACT.whatsapp?`<a class="social wa" href="https://wa.me/${CONTACT.whatsapp}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.8-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.5 1 2.7 1.8 2.8 4.4 3.9c1.6.7 2.3.8 3.1.6.5-.1 1.5-.6 1.7-1.2s.2-1.1.2-1.2-.2-.2-.5-.3z"/></svg>WhatsApp</a>`:"";
+ return li+wa}
