@@ -606,3 +606,33 @@ body.mood-on.m-night header{background:linear-gradient(120deg,rgba(255,255,255,.
   50%{opacity:.45;box-shadow:0 0 0 10px rgba(244,63,94,0),0 6px 14px rgba(225,29,72,.2);filter:brightness(.95)}
 }
 @keyframes joinDot{0%{box-shadow:0 0 0 0 rgba(255,255,255,.85)}100%{box-shadow:0 0 0 10px rgba(255,255,255,0)}}
+
+/* v14: live quiz — code always visible, resume card, changeable answers, own-pace mode */
+.lg-codebar{position:sticky;top:86px;z-index:5;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin:0 auto 12px;max-width:560px;padding:10px 16px;border-radius:999px;
+  background:#fff;border:2px solid #6558d3;box-shadow:0 8px 22px rgba(64,55,142,.18);color:#40378e}
+.lg-codebar span{font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#77819a}
+.lg-codebar b{font:800 24px Manrope;letter-spacing:.18em;color:#211c58}
+.lg-codebar em{font-style:normal;font-size:13px;color:#5b6283;max-width:44vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:800px){.lg-codebar{top:76px}.lg-codebar b{font-size:22px}}
+.lg-codebadge{background:#fff!important;color:#40378e!important;letter-spacing:.08em}
+.tiles.settled .tile{animation:none!important}
+.lg-stage .tile.other{opacity:.72}
+.lg-stage .tile.picked{transform:scale(1.02);box-shadow:0 0 0 4px #fff,0 10px 24px rgba(0,0,0,.25)!important}
+.tile em.mine{display:block;margin-top:6px;font-style:normal;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;opacity:.9}
+.lg-leave{color:#d5d2f5!important;font-size:12px!important;justify-self:center;margin-top:4px}
+.lg-resume{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px;border:2px solid #13a99b!important;background:linear-gradient(120deg,#f0fdfa,#fff)!important}
+.lg-resume h3{margin:4px 0}
+.lg-mode{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:640px;margin:0 auto;width:100%}
+.lg-mode button{background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.3);color:#fff;text-align:left;display:grid;gap:4px;padding:12px 14px;border-radius:14px}
+.lg-mode button.on{background:#fff;color:#40378e;border-color:#fff}
+.lg-mode span{font-size:12px;font-weight:500;opacity:.85}
+@media(max-width:520px){.lg-mode{grid-template-columns:1fr}}
+.lg-modepick{border:1px solid var(--line);border-radius:12px;padding:10px 14px;display:grid;gap:8px}
+.lg-modepick legend{font-weight:800;font-size:13px;padding:0 6px}
+.lg-progcard{overflow:auto;max-height:60vh;padding:10px!important}
+.lg-prog{width:100%;border-collapse:collapse;font-size:14px}
+.lg-prog th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#77819a;padding:6px 8px}
+.lg-prog td{padding:8px;border-top:1px solid var(--line);vertical-align:middle}
+.lg-prog td:last-child{font-weight:800;text-align:right}.lg-prog th:last-child{text-align:right}
+.lg-prog .bar{height:6px;margin-top:5px;max-width:200px}
+.lg-prog .guesttag{background:#efedff;color:#6558d3}

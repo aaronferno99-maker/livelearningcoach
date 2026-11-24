@@ -899,9 +899,10 @@ render=async function(){
   navKey=key}
  await _render0();
  const a=$("app");
- if(a&&navDepth>0&&!a.querySelector(".backbtn")&&!["home"].includes(S.page)){const b=document.createElement("button");b.className="backbtn";b.type="button";b.dataset.act="back";b.innerHTML='<span aria-hidden="true">←</span> Back';a.prepend(b)}
+ if(a&&navDepth>0&&!a.querySelector(".backbtn")&&!["home"].includes(S.page)&&!lgPlaying()){const b=document.createElement("button");b.className="backbtn";b.type="button";b.dataset.act="back";b.innerHTML='<span aria-hidden="true">←</span> Back';a.prepend(b)}
 };
 addEventListener("popstate",e=>{const st=e.state?.llc;if(!st)return;
+ if(lgPlaying()){history.pushState({llc:navSnap(),d:navDepth},"");toast("You are still in the quiz. To go, press “Leave quiz” at the bottom.");return}
  if((RUN.busy()||(ED&&ED.dirty&&S.r?.view==="edit"))&&!confirm(RUN.busy()?"Leave this page? Your answers so far are kept on this device.":"Leave without saving your changes?")){history.pushState({llc:navSnap(),d:navDepth},"");return}
  navDepth=e.state.d||0;stopTimers();S.page=st.page;S.tab=st.tab;S.video=st.video;S.r=st.r?{...st.r}:null;navKey=JSON.stringify(navSnap());render()});
 let timers=[];const every=(ms,f)=>{const t=setInterval(f,ms);timers.push(t);return t};
@@ -1442,74 +1443,123 @@ Object.assign(ACT,{fk(el){setR({k:el.dataset.k})},fopen(el){setR({thread:el.data
  async fremove(el){if(!confirm("Remove this message?"))return;await rpc("forum_remove",{p_message:el.dataset.id});render()},
  async fdelthread(el){if(!confirm("Delete this whole conversation for everyone? This cannot be undone."))return;await ok(db.from("forum_threads").delete().eq("id",el.dataset.id));stopTimers();toast("Conversation deleted.");setR({})}});
 
+/* start a live quiz; own pace needs schema_v14.sql, so fall back quietly if it has not been run yet */
+async function hostLive(a){const r=await db.rpc("live_host",a);if(!r.error)return r.data;
+ if("p_self_paced" in a&&/function|schema cache|PGRST202/i.test(`${r.error.message} ${r.error.code}`)){const {p_self_paced,...b}=a;toast("Own-pace mode needs the database update (schema_v14.sql). Starting in the usual mode.");return ok(db.rpc("live_host",b))}
+ toast(r.error.message);throw r.error}
 /* ---------- live quiz game ---------- */
-let LG=null; /* {id, game, players, mine, picked} */
-const lgLeft=g=>Math.max(0,g.seconds-(Date.now()+(LG?.skew||0)-new Date(g.q_started_at).getTime())/1000);
+let LG=null; /* {id, game, players, mine, picked, myq} */
+/* the quiz a phone is playing is kept on the phone, so the back button, a refresh or a closed tab never loses it */
+const LGKEY="llc_lg";
+function lgSave(){if(!LG||LG.host||!LG.game)return;try{localStorage.setItem(LGKEY,JSON.stringify({id:LG.id,code:LG.game.code||"",title:LG.game.title||"",guest:!!LG.guest,player:LG.player||null,token:LG.token||null,name:LG.me?.name||"",uid:user?.id||null,at:Date.now()}))}catch{}}
+function lgForget(){try{localStorage.removeItem(LGKEY);sessionStorage.removeItem("llc_guest")}catch{}}
+function lgSaved(){try{const s=JSON.parse(localStorage.getItem(LGKEY)||sessionStorage.getItem("llc_guest")||"null");if(!s||!s.id)return null;if(s.at&&Date.now()-s.at>6*3600e3){lgForget();return null}if(!s.guest&&(!user||s.uid!==user.id))return null;return s}catch{return null}}
+function lgPlaying(){return !!(LG&&!LG.host&&LG.game&&LG.game.phase!=="ended"&&(S.page==="play"||(S.page==="app"&&S.tab==="live"&&S.r?.view==="play")))}
+const lgWho=()=>LG?.guest?{p_player:LG.player,p_token:LG.token}:{};
+/* the question this player is on: the class's question, or their own one in own-pace mode */
+function lgEff(){const g=LG?.game;if(!g)return null;if(!g.self_paced||LG.host||g.phase!=="question"||!LG.myq)return g;const m=LG.myq;return {...g,q_index:m.q_index,q_started_at:m.started_at,current:m.current}}
+const lgLeft=g=>g.q_started_at?Math.max(0,g.seconds-(Date.now()+(LG?.skew||0)-new Date(g.q_started_at).getTime())/1000):g.seconds;
+async function lgHostPlayers(){const r=await db.rpc("live_host_players",{p_game:LG.id});if(!r.error)return r.data||[];
+ const t=await db.from("live_players").select("game_id,student_id,player_id,name,score,is_guest").eq("game_id",LG.id);return t.data||[]}
 async function lgPull(){if(!LG)return false;let ch=false;
- if(LG.host){const [g,pl]=await Promise.all([db.from("live_games").select("*").eq("id",LG.id).maybeSingle(),db.from("live_players").select("game_id,student_id,player_id,name,score,is_guest").eq("game_id",LG.id)]);if(!g.data)return false;
-  ch=!LG.game||g.data.phase!==LG.game.phase||g.data.q_index!==LG.game.q_index||(pl.data||[]).length!==(LG.players||[]).length;
-  LG.game=g.data;LG.players=(pl.data||[]).sort((a,b)=>b.score-a.score);LG.count=LG.players.length;return ch}
+ if(LG.host){const [g,pl]=await Promise.all([db.from("live_games").select("*").eq("id",LG.id).maybeSingle(),lgHostPlayers()]);if(!g.data)return false;
+  const sig=JSON.stringify(pl.map(p=>[p.player_id,p.score,p.q_index,p.q_started_at?1:0]));
+  ch=!LG.game||g.data.phase!==LG.game.phase||g.data.q_index!==LG.game.q_index||g.data.self_paced!==LG.game.self_paced||sig!==LG.sig||(g.data.phase==="lobby"&&pl.length!==(LG.players||[]).length);
+  if(g.data.phase==="question"&&!g.data.self_paced&&LG.game&&LG.game.phase==="question"&&sig!==LG.sig&&g.data.q_index===LG.game.q_index)ch=false; /* scores are hidden during a question: no need to redraw */
+  LG.sig=sig;LG.game=g.data;LG.players=pl.sort((a,b)=>b.score-a.score);LG.count=LG.players.length;return ch}
  const r=await db.rpc("live_state",LG.guest?{p_game:LG.id,p_player:LG.player,p_token:LG.token}:{p_game:LG.id});if(r.error||!r.data)return false;const d=r.data;
- ch=!LG.game||d.game.phase!==LG.game.phase||d.game.q_index!==LG.game.q_index||d.count!==LG.count;
- if(ch&&d.game.phase==="question"&&(!LG.game||LG.game.q_index!==d.game.q_index)){LG.picked=null;LG.matchSel=null;LG.matchSent=false;LG.matchAwaitConf=false;LG.confSent=false}
- LG.skew=new Date(d.server_now).getTime()-Date.now();LG.game=d.game;LG.players=d.players;LG.me=d.me;LG.mine=d.mine;LG.count=d.count;return ch}
+ const myq=d.my_q||null,qk=d.game.self_paced&&myq?`${myq.q_index}|${myq.started_at||""}`:String(d.game.q_index);
+ ch=!LG.game||d.game.phase!==LG.game.phase||qk!==LG.qk||d.count!==LG.count;
+ if(d.game.phase==="question"&&qk!==LG.qk){LG.picked=null;LG.matchSel=null;LG.matchSent=false;LG.confSent=false;LG.want=null}
+ LG.qk=qk;LG.skew=new Date(d.server_now).getTime()-Date.now();LG.game=d.game;LG.players=d.players;LG.me=d.me;LG.mine=d.mine;LG.count=d.count;LG.myq=myq;
+ /* back after the back button or a refresh: show the option they had already pressed */
+ const e=lgEff(),my=e&&e.phase==="question"&&(LG.mine||[]).find(a=>a.q_index===e.q_index);
+ if(my&&my.answer!==undefined){if(e.current?.type==="match"){if(!LG.matchSel&&Array.isArray(my.answer)){LG.matchSel=[...my.answer];LG.matchSent=true}}else if(LG.picked==null&&typeof my.answer==="number")LG.picked=my.answer;if(my.has_conf)LG.confSent=true}
+ else if(my&&LG.picked==null&&e.current?.type!=="match")LG.picked=-1; /* older database: the first answer stays */
+ lgSave();return ch}
 function lgLoop(){stopTimers();every(1500,async()=>{if(!LG)return stopTimers();try{if(await lgPull())render();else lgTick()}catch{}});every(250,lgTick)}
-function lgTick(){const g=LG?.game;if(!g||g.phase!=="question")return;const l=lgLeft(g),b=$("lgBar"),t=$("lgSec");if(b)b.style.width=(100*l/g.seconds)+"%";if(t)t.textContent=Math.ceil(l);
- if(l<=0&&isStaff()&&!LG.auto){LG.auto=true;rpc("live_step",{p_game:LG.id,p_action:"reveal"}).then(()=>{LG.auto=false;lgPull().then(render)}).catch(()=>LG.auto=false)}}
+function lgTick(){const g=lgEff();if(!g||g.phase!=="question")return;if(g.self_paced&&(LG.host||!g.q_started_at))return;
+ const l=lgLeft(g),b=$("lgBar"),t=$("lgSec");if(b)b.style.width=(100*l/g.seconds)+"%";if(t)t.textContent=Math.ceil(l);
+ if(l>0)return;
+ if(LG.host){if(isStaff()&&!LG.auto){LG.auto=true;rpc("live_step",{p_game:LG.id,p_action:"reveal"}).then(()=>{LG.auto=false;lgPull().then(render)}).catch(()=>LG.auto=false)}return}
+ document.querySelectorAll('.lg-stage [data-act="lgpick"],.lg-stage [data-chg="lgmatchpick"],.lg-stage [data-act="lgmatchsend"]').forEach(x=>{x.disabled=true;x.removeAttribute("data-act")});
+ if(g.self_paced&&LG.autoNext!==g.q_index){LG.autoNext=g.q_index;setTimeout(()=>lgNext(),900)}}
+/* send the newest press only, one at a time, so the last option pressed is always the one saved */
+function lgSend(ans,conf){LG.want={ans,conf:conf??LG.want?.conf??null};if(LG.sending)return;LG.sending=true;
+ (async()=>{const me=LG;try{while(me.want){const w=me.want;me.want=null;const a={p_game:me.id,p_answer:w.ans,...(me.guest?{p_player:me.player,p_token:me.token}:{})};if(w.conf!=null)a.p_confidence=w.conf;
+  const r=await db.rpc(me.guest?"live_answer_guest":"live_answer",a);if(r.error&&!me.want)toast(/already answered/i.test(r.error.message)?"Your first answer was kept.":r.error.message)}}finally{me.sending=false}})()}
+async function lgNext(){const m=LG?.myq;if(!m)return;await db.rpc("live_self_step",{p_game:LG.id,p_action:"next",p_from:m.q_index,...lgWho()});await lgPull();render()}
 /* show every player who has joined, not just the top few, so none of their names or scores go missing on the host's screen */
 const podium=(pl,n=Infinity)=>`<ol class="board">${pl.slice(0,n).map((p,i)=>`<li class="${p.me||(user&&p.student_id===user.id)?"me":""}"><span>${["🥇","🥈","🥉"][i]||i+1}</span><b>${esc(p.name||"Player")}${p.is_guest?' <small class="guesttag">guest</small>':""}</b><em>${p.score}</em></li>`).join("")||'<li class="muted">No players yet</li>'}</ol>`;
 const confBlock=()=>`<div class="conf10">${Array.from({length:10},(_,i)=>`<button type="button" class="confbtn" data-act="lgconf" data-v="${i+1}">${i+1}</button>`).join("")}</div><p class="muted small">How confident are you in that answer? 1 = not at all, 10 = very confident</p>`;
 function lgQuestion(g,opts={}){const q=g.current;if(!q)return "";const labels=q.type==="tf"?["True","False"]:q.type==="ar"?AR_OPTS:q.options||[];const rv=g.phase==="reveal"?g.reveal:null;const tot=rv?Object.values(rv.counts||{}).reduce((a,b)=>a+b,0):0;
  const stem=q.type==="ar"?`<div class="ar"><b>Assertion (A)</b> ${esc(q.assertion)}</div><div class="ar"><b>Reason (R)</b> ${esc(q.reason)}</div>`:esc(q.q||"");
+ const open=opts.play&&!rv&&g.phase==="question"&&lgLeft(g)>0;
  if(q.type==="match"){
-  const myAns=(LG?.mine||[]).find(a=>a.q_index===g.q_index);
   if(rv)return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><b>${esc(q.right[rv.answer[i]])}</b></div>`).join("")}</div></div>${rv.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`;
-  if(opts.play){
-   if(myAns||LG.matchSent)return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map(l=>`<div class="mrow"><span>${esc(l)}</span><b>…</b></div>`).join("")}</div></div>`;
-   if(LG.matchAwaitConf)return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map(l=>`<div class="mrow"><span>${esc(l)}</span><b>…</b></div>`).join("")}</div></div>${confBlock()}`;
-   const sel=LG.matchSel||(LG.matchSel=Array(q.left.length).fill(null));const done=sel.every(x=>x!=null);
-   return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><select data-chg="lgmatchpick" data-li="${i}"><option value="">Choose…</option>${q.right.map((r,ri)=>`<option value="${ri}" ${sel[i]===ri?"selected":""}>${esc(r)}</option>`).join("")}</select></div>`).join("")}</div></div><button type="button" class="primary big-btn" data-act="lgmatchsend" ${done?"":"disabled"}>Submit matches</button>`}
+  if(opts.play){const sel=LG.matchSel||(LG.matchSel=Array(q.left.length).fill(null));const done=sel.every(x=>x!=null);
+   return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><select ${open?`data-chg="lgmatchpick"`:"disabled"} data-li="${i}"><option value="">Choose…</option>${q.right.map((r,ri)=>`<option value="${ri}" ${sel[i]===ri?"selected":""}>${esc(r)}</option>`).join("")}</select></div>`).join("")}</div></div><button type="button" class="primary big-btn" ${open?'data-act="lgmatchsend"':""} ${done&&open?"":"disabled"}>${LG.matchSent?"Update my matches":"Submit matches"}</button>${open&&LG.matchSent&&g.ask_confidence&&!LG.confSent?confBlock():""}`}
   return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map(l=>`<div class="mrow"><span>${esc(l)}</span><b>?</b></div>`).join("")}</div></div><p class="muted small">Students match each item on their own phones.</p>`}
- return `<div class="lg-q">${stem}</div><div class="tiles big t${labels.length}">${labels.map((o,i)=>{const c=rv?(rv.counts?.[String(i)]||0):0;const cls=rv?(rv.answer===i?" right":" dim"):(LG.picked===i?" picked":LG.picked!=null?" dim":"");
-  return `<button type="button" class="tile c${i%4}${cls}" ${opts.play&&!rv&&LG.picked==null?`data-act="lgpick" data-v="${i}"`:"disabled"}><span>${"ABCD"[i]}</span>${esc(o)}${rv?`<em class="cnt">${c}${tot?` · ${Math.round(100*c/tot)}%`:""}</em>`:""}</button>`}).join("")}</div>${opts.play&&!rv&&LG.picked!=null&&g.ask_confidence&&!LG.confSent?confBlock():""}${rv?.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`}
+ const pk=opts.play?LG.picked:null;
+ return `<div class="lg-q">${stem}</div><div class="tiles big t${labels.length}${pk!=null?" settled":""}">${labels.map((o,i)=>{const c=rv?(rv.counts?.[String(i)]||0):0;const cls=rv?(rv.answer===i?" right":" dim"):(pk===i?" picked":pk!=null&&pk>=0?" other":"");
+  return `<button type="button" class="tile c${i%4}${cls}" ${open&&pk!==-1?`data-act="lgpick" data-v="${i}"`:"disabled"}><span>${"ABCD"[i]}</span>${esc(o)}${pk===i&&!rv?'<em class="mine">Your answer</em>':""}${rv?`<em class="cnt">${c}${tot?` · ${Math.round(100*c/tot)}%`:""}</em>`:""}</button>`}).join("")}</div>${open&&pk!=null&&pk>=0&&g.ask_confidence&&!LG.confSent?confBlock():""}${rv?.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`}
+const lgCodeTiles=g=>`<div class="lg-code">${String(g.code||"").split("").join("<i></i>")}</div>`;
 async function hostPage(){
  if(!LG||LG.id!==R().id){LG={id:R().id,host:true};await lgPull()}
  const g=LG.game;if(!g){LG=null;return '<div class="card">This live quiz has ended.</div>'}
  S.after=lgLoop;const pl=LG.players;
- if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ · ${esc(g.title||"")}</div><p>Students open <b>Live class</b> on the website and type this code</p><div class="lg-code">${g.code.split("").join("<i></i>")}</div>
+ const mode=`<div class="lg-mode" role="radiogroup" aria-label="How the questions move"><button type="button" role="radio" aria-checked="${!!g.self_paced}" class="${g.self_paced?"on":""}" data-act="lgmode" data-v="1"><b>Own pace</b><span>Every student starts from question 1, even if they join late</span></button><button type="button" role="radio" aria-checked="${!g.self_paced}" class="${g.self_paced?"":"on"}" data-act="lgmode" data-v="0"><b>Together</b><span>You move the whole class to the next question</span></button></div>`;
+ if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ · ${esc(g.title||"")}</div><p>Students open <b>Join Live</b> on the website and type this code</p>${lgCodeTiles(g)}${mode}
   <div class="lg-players"><b>${pl.length}</b> joined${pl.length?`<div class="namecloud">${pl.map(p=>`<span>${esc(p.name||"")}</span>`).join("")}</div>`:""}</div><div class="actions"><button class="primary big-btn" data-act="lgstep" data-a="next" ${pl.length?"":"disabled"}>Start quiz</button><button class="outline" data-act="lgstep" data-a="end">Cancel</button></div></div>`;
  if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>Final results</h1>${podium(pl,10)}<div class="actions"><button class="primary" data-act="lgclose">Back to My library</button>${g.collect_profile?`<button class="soft" data-act="lgcsv" data-id="${g.id}">Download guest data (CSV)</button>${LG.report?"":`<button class="soft" data-act="lgreport" data-id="${g.id}">View guest data report</button>`}`:""}</div>${g.collect_profile&&LG.report?guestReportHTML(LG.report):""}</div><div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`;
- const answered=g.phase==="reveal"?null:"";
- return `<div class="lg-stage"><div class="row"><span class="badge">Question ${g.q_index+1} of ${g.n}</span>${g.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(lgLeft(g))}</b>s</span>`:'<span class="badge">Answer</span>'}<span class="muted small">${pl.length} players</span></div>
+ if(g.self_paced){const fin=pl.filter(p=>p.q_index>=g.n).length;
+  return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ · OWN PACE · ${esc(g.title||"")}</div><p>Late? Students can still join with this code. They start from question 1.</p>${lgCodeTiles(g)}
+  <div class="lg-players"><b>${pl.length}</b> joined · <b>${fin}</b> finished</div>
+  <div class="card lg-progcard"><table class="lg-prog"><thead><tr><th>Student</th><th>Progress</th><th>Points</th></tr></thead><tbody>${pl.map(p=>`<tr><td>${esc(p.name||"")}${p.is_guest?' <small class="guesttag">guest</small>':""}</td><td>${p.q_index>=g.n?"✓ Finished":p.q_started_at?`Question ${p.q_index+1} of ${g.n}`:"Starting…"}<div class="bar"><i style="width:${Math.round(100*Math.min(p.q_index??0,g.n)/g.n)}%"></i></div></td><td>${p.score}</td></tr>`).join("")||'<tr><td colspan="3" class="muted">Waiting for students…</td></tr>'}</tbody></table></div>
+  <div class="actions"><button class="primary big-btn" data-act="lgstep" data-a="end">End quiz and show results</button></div></div>`}
+ return `<div class="lg-stage"><div class="row"><span class="badge">Question ${g.q_index+1} of ${g.n}</span><span class="badge lg-codebadge">Code ${esc(g.code)}</span>${g.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(lgLeft(g))}</b>s</span>`:'<span class="badge">Answer</span>'}<span class="muted small">${pl.length} players</span></div>
   ${g.phase==="question"?`<div class="bar lgbar"><i id="lgBar" style="width:${100*lgLeft(g)/g.seconds}%"></i></div>`:""}${lgQuestion(g)}
   ${g.phase==="reveal"?`<h3>Leaderboard</h3>${podium(pl)}`:""}
   <div class="actions">${g.phase==="question"?'<button class="primary" data-act="lgstep" data-a="reveal">Show answer</button>':`<button class="primary big-btn" data-act="lgstep" data-a="next">${g.q_index+1<g.n?"Next question →":"Finish and show results"}</button>`}<button class="outline danger" data-act="lgstep" data-a="end">End quiz</button></div></div>`}
+/* the quiz code stays on the student's screen the whole time */
+const lgCodeBar=g=>`<div class="lg-codebar"><span>Quiz code</span><b>${esc(g.code||"")}</b>${g.title?`<em>${esc(g.title)}</em>`:""}</div>`;
 function playPage(){
- if(!LG&&S.page==="play"){const sv=(()=>{try{return JSON.parse(sessionStorage.getItem("llc_guest")||"null")}catch{return null}})();if(sv)LG=sv}
+ if(!LG){const sv=lgSaved();if(sv){if(sv.guest&&S.page==="play")LG={id:sv.id,guest:true,player:sv.player,token:sv.token};else if(!sv.guest&&S.page==="app")LG={id:sv.id}}}
  const g=LG?.game;
- if(!g){if(LG&&!LG.tried){LG.tried=true;S.after=()=>lgPull().then(()=>render());return '<div class="card">Joining…</div>'}return `<div class="card">This live quiz has ended. <button class="soft" data-act="lgleave">Back</button></div>`}
- S.after=lgLoop;const pl=LG.players||[],meRow=LG.me,rank=meRow?.rank;
- const who=LG.guest&&meRow?`<p class="muted small">Playing as <b>${esc(meRow.name)}</b> (guest)</p>`:"";
- if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ</div><h1>You're in!</h1><p class="muted">${esc(g.title||"")}</p>${who}<div class="lg-wait"><span></span><span></span><span></span></div><p>Waiting for the quiz to start. ${LG.count||0} joined so far.</p></div>`;
- if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>${rank===1?"You won! 🏆":rank?`You finished #${rank}`:"Finished"}</h1><p class="muted">${meRow?.score||0} points</p>${podium(pl)}<div class="actions"><button class="primary" data-act="lgleave">Done</button></div></div>${rank&&rank<=3?`<div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`:""}`;
- const my=(LG.mine||[]).find(a=>a.q_index===g.q_index);
- const awaitingConf=g.ask_confidence&&!LG.confSent&&(LG.matchAwaitConf||(LG.picked!=null&&!LG.matchSel));
- const status=g.phase==="reveal"?`<div class="fb ${my?.correct?"good":"bad"} lg-result"><b>${my?(my.correct?`✓ Correct! +${my.points} points`:"✗ Not this time"):"⏱ No answer"}</b><span>Your score: ${meRow?.score||0}${rank?` · position #${rank}`:""}</span></div>`:(!awaitingConf&&(LG.picked!=null||LG.matchSent||my))?'<div class="fb lg-result"><b>Answer locked in</b><span>Wait for the result…</span></div>':"";
- if(my&&LG.picked==null)LG.picked=-1;
- return `<div class="lg-stage"><div class="row"><span class="badge">Question ${g.q_index+1} of ${g.n}</span>${g.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(lgLeft(g))}</b>s</span>`:""}<span class="muted small">${meRow?.score||0} pts</span></div>
- ${g.phase==="question"?`<div class="bar lgbar"><i id="lgBar" style="width:${100*lgLeft(g)/g.seconds}%"></i></div>`:""}${lgQuestion(g,{play:true})}${status}</div>`}
+ if(!g){if(LG&&!LG.tried){LG.tried=true;S.after=()=>lgPull().then(()=>render());return '<div class="card">Joining…</div>'}lgForget();return `<div class="card">This live quiz has ended. <button class="soft" data-act="lgleave">Back</button></div>`}
+ S.after=lgLoop;const pl=LG.players||[],meRow=LG.me,rank=meRow?.rank,top=lgCodeBar(g);
+ const who=meRow?`<p class="muted small">Playing as <b>${esc(meRow.name)}</b>${LG.guest?" (guest)":""}</p>`:"";
+ const leave='<button type="button" class="linklike lg-leave" data-act="lgquit">Leave quiz</button>';
+ if(g.phase==="lobby")return top+`<div class="lg-stage"><div class="eyebrow">LIVE QUIZ</div><h1>You're in!</h1><p class="muted">${esc(g.title||"")}</p>${who}<div class="lg-wait"><span></span><span></span><span></span></div><p>Waiting for the quiz to start. ${LG.count||0} joined so far.</p>${leave}</div>`;
+ if(g.phase==="ended"){lgForget();return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>${rank===1?"You won! 🏆":rank?`You finished #${rank}`:"Finished"}</h1><p class="muted">${meRow?.score||0} points</p>${podium(pl)}<div class="actions"><button class="primary" data-act="lgleave">Done</button></div></div>${rank&&rank<=3?`<div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`:""}`}
+ const e=lgEff();
+ if(g.self_paced&&g.phase==="question"){
+  if(!LG.myq)return top+'<div class="lg-stage"><h1>Loading…</h1></div>';
+  if(!e.q_started_at){if(!LG.starting){LG.starting=true;db.rpc("live_self_step",{p_game:LG.id,p_action:"start",...lgWho()}).then(()=>lgPull()).then(()=>{if(LG)LG.starting=false;render()})}return top+`<div class="lg-stage"><div class="eyebrow">LIVE QUIZ</div><h1>Get ready…</h1><p>You start from question 1.</p>${who}</div>`}
+  if(LG.myq.q_index>=g.n)return top+`<div class="lg-stage"><div class="eyebrow">ALL DONE</div><h1>You finished all ${g.n} questions! 🎉</h1><p>${meRow?.score||0} points${rank?` · #${rank} so far`:""}</p>${who}<p class="muted">Stay on this page. Your professor will show the final results soon.</p></div>`}
+ const my=(LG.mine||[]).find(a=>a.q_index===e.q_index),isMatch=e.current?.type==="match";
+ const answered=isMatch?LG.matchSent:LG.picked!=null,left=lgLeft(e);
+ const status=e.phase==="reveal"?`<div class="fb ${my?.correct?"good":"bad"} lg-result"><b>${my?(my.correct?`✓ Correct! +${my.points} points`:"✗ Not this time"):"⏱ No answer"}</b><span>Your score: ${meRow?.score||0}${rank?` · position #${rank}`:""}</span></div>`
+  :answered&&LG.picked!==-1?`<div class="fb lg-result"><b>Answer saved${!isMatch?`: ${"ABCD"[LG.picked]||""}`:""}</b><span>Not sure? ${isMatch?"Change a match and press Update":"Press another option"} until the time runs out. Your last choice is the one that counts.</span></div>`
+  :answered?'<div class="fb lg-result"><b>Answer locked in</b><span>Wait for the result…</span></div>':"";
+ const next=g.self_paced&&answered?`<div class="actions"><button type="button" class="primary big-btn" data-act="lgnext">${e.q_index+1<g.n?"Next question →":"Finish ✓"}</button></div>`:"";
+ return top+`<div class="lg-stage"><div class="row"><span class="badge">Question ${e.q_index+1} of ${g.n}</span>${e.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(left)}</b>s</span>`:""}<span class="muted small">${meRow?.score||0} pts</span></div>
+ ${e.phase==="question"?`<div class="bar lgbar"><i id="lgBar" style="width:${100*left/e.seconds}%"></i></div>`:""}${lgQuestion(e,{play:true})}${status}${next}${leave}</div>`}
 const joinQuizCard=()=>`<form data-form="lgjoin" class="card stack lg-join"><div class="eyebrow">LIVE QUIZ</div><h3>Join a live quiz</h3><p class="muted small">Type the six-digit code your professor shows on the screen.</p><div class="row"><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="000000" class="codein"><button class="primary">Join</button></div></form>`;
 Object.assign(FORM,{async lgjoin(f,d){const id=await rpc("live_join",{p_code:d.get("code")});LG={id};await lgPull();setR({view:"play",id})}});
 /* Join live page: live quiz codes work for everyone; guests give a name */
 async function joinLiveQuiz(code){ /* true when the code belonged to a live quiz */
  if(!/^\d{6}$/.test(code))return false;
+ const sv=lgSaved();
+ if(sv&&sv.guest&&sv.code===code&&!(user&&role()==="student")){const st=await db.rpc("live_state",{p_game:sv.id,p_player:sv.player,p_token:sv.token});
+  if(!st.error&&st.data?.me&&st.data.game.phase!=="ended"){LG={id:sv.id,guest:true,player:sv.player,token:sv.token};await lgPull();S={page:"play"};render();toast("Welcome back. You are continuing where you left off.");return true}}
  const look=await db.rpc("live_lookup",{p_code:code});if(look.error||!look.data)return false;
  if(user&&role()==="student"){const r=await db.rpc("live_join",{p_code:code});if(r.error){toast(r.error.message);return true}LG={id:r.data};await lgPull();S.page="app";S.tab="live";S.r={view:"play",id:r.data};render();return true}
  const name=($("displayName")?.value||"").trim();
  if(name.length<2){toast(`Found "${look.data.title||"Live quiz"}". Type your name, then press Join again.`);$("displayName")?.focus();return true}
  const doJoin=async det=>{const args={p_code:code,p_name:name};if(det)Object.assign(args,{p_subject:det.subject,p_study_level:det.study_level,p_year:det.year,p_locality:det.locality,p_gender:det.gender,p_native:det.native,p_consent:det.consent});
   const r=await db.rpc("live_join_guest",args);if(r.error){toast(r.error.message);return}
-  LG={id:r.data.game,guest:true,player:r.data.player,token:r.data.token};try{sessionStorage.setItem("llc_guest",JSON.stringify(LG))}catch{}
+  LG={id:r.data.game,guest:true,player:r.data.player,token:r.data.token};
   await lgPull();S={page:"play"};render()};
  if(look.data.collect_profile){demoForm(name,doJoin);return true}
  await doJoin(null);return true}
@@ -1539,23 +1589,22 @@ function guestReportHTML(rows,total){
   ${rows.map(p=>`<tr><td>${esc(p.name||"")}</td><td>${p.is_guest?"Yes":"No"}</td><td>${p.marks??"-"}${p.total?` / ${p.total}`:""}</td><td>${esc(p.g_subject||"-")}</td><td>${esc(p.g_study_level||"-")}</td><td>${p.g_year??"-"}</td><td>${esc(p.g_locality||"-")}</td><td>${esc(p.g_gender||"-")}</td><td>${esc(p.g_native||"-")}</td><td>${p.g_consent?"Yes":"No"}</td><td>${p.avg_confidence??"-"}</td><td>${confBand(p.avg_confidence)||"-"}</td></tr>`).join("")||'<tr><td colspan="12" class="muted">No participants yet.</td></tr>'}
   </tbody></table></div></div>`}
 Object.assign(ACT,{
- async libhost(el){const g=await rpc("live_host",{p_activity:el.dataset.id,p_seconds:20});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},
+ async libhost(el){const g=await hostLive({p_activity:el.dataset.id,p_seconds:20,p_self_paced:true});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},
  async lgstep(el){if(el.dataset.a==="end"&&!confirm("End this live quiz now?"))return;await rpc("live_step",{p_game:LG.id,p_action:el.dataset.a});await lgPull();if(el.dataset.a==="end"&&LG.game?.q_index<0){stopTimers();LG=null;return setR({})}render()},
  async lgreport(el){const rows=await rpc("live_guest_csv",{p_game:el.dataset.id});LG.report=rows;render()},
  async lgcsv(el){const gid=el.dataset.id;const rows=await rpc("live_guest_csv",{p_game:gid});
   download(`live_quiz_guests_${gid.slice(0,8)}.csv`,[csvLine(["Name","Guest","Marks","Total","Subject","Study level","Year","Rural/Urban","Gender","Native","Consent","Avg confidence (1-10)","Confidence band"]),
    ...rows.map(p=>csvLine([p.name||"",p.is_guest?"Yes":"No",p.marks,p.total,p.g_subject||"",p.g_study_level||"",p.g_year||"",p.g_locality||"",p.g_gender||"",p.g_native||"",p.g_consent?"Yes":"No",p.avg_confidence??"",confBand(p.avg_confidence)||""]))].join("\n"))},
- lgclose(){stopTimers();LG=null;setR({})},lgleave(){stopTimers();const g=LG?.guest;LG=null;try{sessionStorage.removeItem("llc_guest")}catch{};if(g||S.page==="play"){S={page:"join"};render()}else setR({})},
- async lgpick(el){if(LG.picked!=null)return;LG.picked=+el.dataset.v;render();
-  if(LG.game?.ask_confidence)return; /* wait for the confidence tap before sending */
-  try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:LG.picked}):rpc("live_answer",{p_game:LG.id,p_answer:LG.picked}));try{playFeedbackSound(true)}catch{}}catch(e){}},
- async lgmatchsend(){const sel=LG.matchSel;if(!sel||sel.some(x=>x==null))return toast("Match every item first.");if(LG.matchSent||LG.matchAwaitConf)return;
-  if(LG.game?.ask_confidence){LG.matchAwaitConf=true;render();return}
-  LG.matchSent=true;render();
-  try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:sel}):rpc("live_answer",{p_game:LG.id,p_answer:sel}));try{playFeedbackSound(true)}catch{}}catch(e){LG.matchSent=false;toast(e.message||"Could not send your answer.");render()}},
- async lgconf(el){const v=+el.dataset.v;const isMatch=LG.matchAwaitConf;const ans=isMatch?LG.matchSel:LG.picked;
-  if(isMatch)LG.matchSent=true;LG.confSent=true;render();
-  try{await (LG.guest?rpc("live_answer_guest",{p_game:LG.id,p_player:LG.player,p_token:LG.token,p_answer:ans,p_confidence:v}):rpc("live_answer",{p_game:LG.id,p_answer:ans,p_confidence:v}));try{playFeedbackSound(true)}catch{}}catch(e){LG.confSent=false;if(isMatch){LG.matchSent=false;LG.matchAwaitConf=true}toast(e.message||"Could not send your answer.");render()}}});
+ lgclose(){stopTimers();LG=null;setR({})},lgleave(){stopTimers();const g=LG?.guest;LG=null;lgForget();if(g||S.page==="play"){S={page:"join"};render()}else setR({})},
+ async lgpick(el){if(!LG)return;const v=+el.dataset.v;if(LG.picked===v)return;LG.picked=v;lgSend(v);try{playFeedbackSound(true)}catch{};render()},
+ lgmatchsend(){const sel=LG?.matchSel;if(!sel||sel.some(x=>x==null))return toast("Match every item first.");LG.matchSent=true;lgSend([...sel]);try{playFeedbackSound(true)}catch{};render()},
+ lgconf(el){const v=+el.dataset.v;const q=lgEff()?.current;const ans=q?.type==="match"?(LG.matchSel?[...LG.matchSel]:null):LG.picked;if(ans==null||ans===-1)return;LG.confSent=true;lgSend(ans,v);render()},
+ lgnext(el){el.disabled=true;lgNext()},
+ lgquit(){if(!confirm("Leave this quiz? You can come back with the same code and continue where you left off."))return;stopTimers();const g=LG?.guest;LG=null;if(g||S.page==="play"){S={page:"join"};render()}else setR({})},
+ async lgmode(el){const v=el.dataset.v==="1";if(!LG?.game||!!LG.game.self_paced===v)return;try{await rpc("live_set_mode",{p_game:LG.id,p_self_paced:v})}catch{return}await lgPull();render();toast(v?"Own pace: every student starts from question 1, even late joiners.":"Together: you move the class from question to question.")},
+ async lgresume(){const sv=lgSaved();if(!sv)return toast("That quiz has ended.");stopTimers();
+  if(sv.guest){LG={id:sv.id,guest:true,player:sv.player,token:sv.token};await lgPull();S={page:"play"};render()}
+  else{LG={id:sv.id};await lgPull();S.page="app";S.tab="live";S.r={view:"play",id:sv.id};render()}}});
 CHG.lgmatchpick=el=>{const li=+el.dataset.li;const sel=LG.matchSel||(LG.matchSel=[]);sel[li]=el.value===""?null:+el.value;render()};
 
 /* =====================================================================
@@ -1833,6 +1882,7 @@ async function liveTabStaff(){
   ${r.lqErrs?.length?`<div class="notice"><b>${r.lqErrs.length} part(s) could not be read:</b><ul class="small">${r.lqErrs.slice(0,10).map(e=>`<li>${esc(e)}</li>`).join("")}</ul></div>`:""}
   <label class="check"><input type="checkbox" name="collect_profile"> Collect each participant's details (subject, year, gender, native place, rural/urban) and consent before they can join — not needed for every live quiz</label>
   <label class="check"><input type="checkbox" name="ask_confidence"> Ask participants to rate how confident they are (1–10) after each answer</label>
+  <fieldset class="lg-modepick"><legend>How should the questions move?</legend><label class="check"><input type="radio" name="pace" value="self" checked> <span><b>Own pace</b> — every student starts from question 1, even if they join late</span></label><label class="check"><input type="radio" name="pace" value="together"> <span><b>Together</b> — you move the whole class to the next question</span></label></fieldset>
   <div class="actions" style="margin:0"><button type="button" class="soft" data-act="lqcheck">Check questions</button><button class="primary big-btn">Create and start ▶</button></div><div id="lqPreview">${r.lqPrev||""}</div></form>`;
  else form=`<form data-form="session" data-type="${t}" class="card stack lbuild"><div class="form-grid"><label>Title<input name="title" required placeholder="e.g. Warm-up"></label><label>Timer${timerSel("timer","",true)}</label></div>
   <label>${t==="word"?"Prompt (e.g. One word that describes the sea)":t==="open"?"Question":"Question"}<textarea name="prompt" rows="2" required></textarea></label>
@@ -1854,7 +1904,7 @@ Object.assign(ACT,{
  ltype(el){setR({lt:el.dataset.k})},
  lqtemplate(){download("live_quiz_template.csv",templateCSV("quiz"))},
  lqcheck(){const f=document.querySelector("form[data-form=lqcreate]");const p=lqParse();Object.assign(R(),{lqText:p.t,lqErrs:p.errs,lqPrev:lqPreview(p.out),lqTitle:f.title.value,lqSec:f.seconds.value});render();toast(p.out.length?`${p.out.length} question(s) ready${p.errs.length?`, ${p.errs.length} part(s) skipped`:""}.`:"No questions found yet. Check the format or download the template.")},
- async lqhost(el){const sec=+(document.querySelector("form[data-form=lqcreate] [name=seconds]")?.value||20);const g=await rpc("live_host",{p_activity:el.dataset.id,p_seconds:sec});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},
+ async lqhost(el){const sec=+(document.querySelector("form[data-form=lqcreate] [name=seconds]")?.value||20);const g=await hostLive({p_activity:el.dataset.id,p_seconds:sec,p_self_paced:true});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},
  async lqdel(el){if(!confirm("Delete this live quiz and its saved results?"))return;await ok(db.from("activities").delete().eq("id",el.dataset.id));toast("Deleted.");render()},
  async libedit2(el){await loadED(el.dataset.id);S.tab="library";S.r={view:"edit",id:el.dataset.id};render()},
  async sessdel(el){if(!confirm("Delete this activity and its responses?"))return;await ok(db.from("sessions").delete().eq("id",el.dataset.id));toast("Deleted.");render()},
@@ -1870,7 +1920,7 @@ Object.assign(FORM,{
  async lqcreate(f,d){const p=parseImport(d.get("txt"),"quiz");if(!p.out.length)return toast(p.errs[0]?`No questions found. ${p.errs[0]}`:"Paste questions or upload a file first.");
   if(p.errs.length&&!confirm(`${p.out.length} question(s) are ready and ${p.errs.length} part(s) could not be read. Start with the ${p.out.length} question(s)?`))return;
   const id=await rpc("save_activity",{p_id:null,p_data:{kind:"quiz",purpose:"live",title:String(d.get("title")).trim(),questions:p.out.map(x=>x.q),status:"published"},p_keys:p.out.map(x=>x.k)});
-  const g=await rpc("live_host",{p_activity:id,p_seconds:+d.get("seconds")||20,p_collect_profile:d.get("collect_profile")==="on",p_ask_confidence:d.get("ask_confidence")==="on"});LG={id:g.id,host:true};await lgPull();S.r={view:"host",id:g.id};render();window.scrollTo(0,0)},
+  const g=await hostLive({p_activity:id,p_seconds:+d.get("seconds")||20,p_collect_profile:d.get("collect_profile")==="on",p_ask_confidence:d.get("ask_confidence")==="on",p_self_paced:d.get("pace")!=="together"});LG={id:g.id,host:true};await lgPull();S.r={view:"host",id:g.id};render();window.scrollTo(0,0)},
  async session(f,d){const type=f.dataset.type||d.get("type"),opts=type==="poll"?pollChoices(String(d.get("options")||"")).opts:String(d.get("options")||"").split("\n").map(x=>x.trim()).filter(Boolean);
   if((type==="poll"||type==="quiz")&&opts.length<2)return toast("Add at least two choices.");if(new Set(opts).size!==opts.length)return toast("Each choice must be different.");
   const sec=+d.get("timer")||0;let code,n=0;do{code=String(Math.floor(100000+Math.random()*900000));n++}while(n<6&&((await db.from("sessions").select("id").eq("code",code)).data||[]).length);
@@ -1973,11 +2023,13 @@ ACT.send=async()=>{const P=PART;if(!P)return;const a=$("answers"),ans=a?.dataset
 ACT.sendmore=()=>partRender();
 ACT.joinother=()=>{PART=null;stopTimers();const p=$("participant");if(p)p.innerHTML="";const c=$("joinCode");if(c){c.value="";c.focus()}};
 /* fill the name the participant used before */
-const _joinPage0=joinPage;joinPage=function(inApp){let h=_joinPage0(inApp);let n="";try{n=sessionStorage.getItem("llc_name")||""}catch{};if(n&&!profile)h=h.replace('id="displayName" value=""',`id="displayName" value="${esc(n)}"`);return h};
+const _joinPage0=joinPage;joinPage=function(inApp){let h=_joinPage0(inApp);let n="";try{n=sessionStorage.getItem("llc_name")||""}catch{};if(n&&!profile)h=h.replace('id="displayName" value=""',`id="displayName" value="${esc(n)}"`);
+ const sv=lgSaved();if(sv)h=`<div class="card lg-resume"><div><div class="eyebrow">YOUR QUIZ IS STILL ON</div><h3>${esc(sv.title||"Live quiz")}</h3><p class="muted small">Code <b>${esc(sv.code||"")}</b>${sv.name?` · playing as <b>${esc(sv.name)}</b>`:""}</p></div><button type="button" class="primary big-btn" data-act="lgresume">Resume quiz →</button></div>`+h;
+ return h};
 
 /* ---------- live quiz host: timer control + motion ---------- */
 const _hostPage0=hostPage;hostPage=async function(){let h=await _hostPage0();const g=LG?.game;
- if(g&&(g.phase==="lobby"||g.phase==="reveal"))h=h.replace('<div class="actions">',`<label class="lgtimer">Time per question <select data-chg="lgtimer">${TIMES.map(t=>`<option value="${t}" ${g.seconds===t?"selected":""}>${fmtSec(t)}</option>`).join("")}</select></label><div class="actions">`);
+ if(g&&(g.phase==="lobby"||g.phase==="reveal"||(g.phase==="question"&&g.self_paced)))h=h.replace('<div class="actions">',`<label class="lgtimer">Time per question <select data-chg="lgtimer">${TIMES.map(t=>`<option value="${t}" ${g.seconds===t?"selected":""}>${fmtSec(t)}</option>`).join("")}</select></label><div class="actions">`);
  return h};
 
 /* ---------- tab wiring ---------- */
@@ -2115,8 +2167,8 @@ function cbStart(){const w=$("chatbotWidget"),wrap=w?.querySelector(".chatbot-to
  if(!db){$("app").innerHTML='<div class="notice">Could not load the Supabase library. Check your internet connection.</div>';return}
  try{await loadUser()}catch(e){console.error(e)}
  db.auth.onAuthStateChange(async(ev)=>{if(ev==="SIGNED_OUT"){user=null;profile=null;sp=null;buildNav()}});
- if(user)S={page:"app",tab:homeTab()};
- else{try{if(sessionStorage.getItem("llc_guest"))S={page:"play"}}catch{}}
+ if(user){S={page:"app",tab:homeTab()};const sv=lgSaved();if(sv&&!sv.guest&&role()==="student")S={page:"app",tab:"live",r:{view:"play",id:sv.id}}}
+ else{if(lgSaved()?.guest)S={page:"play"}}
  if(RECOVERY)S={page:"newpass"};
  else if(AUTH_ERR){history.replaceState(null,"",location.pathname);setTimeout(()=>toast(/expired|invalid/i.test(AUTH_ERR)?"That link has expired. Please ask for a new password reset link.":AUTH_ERR),300)}
  BOOTED=true;render();
