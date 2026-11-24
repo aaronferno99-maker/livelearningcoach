@@ -682,3 +682,7 @@ body.mood-on.m-night header{background:linear-gradient(120deg,rgba(255,255,255,.
 .lg-qstem{font-weight:700;font-size:17px;line-height:1.35}
 .lg-qvstats{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;color:#5b6380}.lg-qvstats b{color:var(--ink);font-size:16px}
 .lg-qview .outline{color:#40378e!important;border-color:#c9c4ff!important}
+/* student question screen: small quiz code in the middle of the top row */
+.lg-playrow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lg-codemini{background:#fff;color:#5b6283;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;white-space:nowrap}
+.lg-codemini b{color:#211c58;letter-spacing:.12em;font-size:14px}
