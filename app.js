@@ -1521,14 +1521,25 @@ function lgGrid(g,pl){if(!pl.length||!pl.some(p=>p.marks!=null))return "";const 
  const cur=!g.self_paced&&g.phase!=="ended"?g.q_index:-1;
  return `<details class="card lg-gridcard" data-lgd="grid" ${LG.open_grid===false?"":"open"}><summary><b>Question by question</b> <span class="muted small">✓ right · ✗ wrong · • answered (still open) · – no answer</span></summary>
  <div class="lg-gridwrap"><table class="lg-grid"><thead><tr><th>Student</th>${idx.map(i=>`<th class="${i===cur?"cur":""}">Q${i+1}</th>`).join("")}</tr></thead><tbody>${pl.map(p=>`<tr><th>${esc(p.name||"")}</th>${idx.map(i=>lgCell[(p.marks||"")[i]||"_"]).join("")}</tr>`).join("")}</tbody><tfoot><tr><th>Class % right</th>${foot}</tr></tfoot></table></div></details>`}
+function lgQBody(q,k,showAns){const a=showAns?k.answer:undefined;const labels=q.type==="tf"?["True","False"]:q.type==="ar"?AR_OPTS:q.options||[];
+ const stem=q.type==="ar"?`<div><b>Assertion:</b> ${esc(q.assertion||"")}</div><div><b>Reason:</b> ${esc(q.reason||"")}</div>`:`<div class="lg-qstem">${esc(q.q||"")}</div>`;
+ const body=q.type==="match"?`<ul class="lg-qopts">${(q.left||[]).map((l,li)=>`<li class="${showAns?"ok":""}">${esc(l)} → ${showAns?esc((q.right||[])[Array.isArray(a)?a[li]:-1]??"?"):"?"}</li>`).join("")}</ul>${showAns?"":`<p class="muted small">Choices: ${(q.right||[]).map(esc).join(" · ")}</p>`}`
+  :`<ul class="lg-qopts">${labels.map((o,oi)=>`<li class="${oi===a?"ok":""}"><b>${"ABCD"[oi]}</b> ${esc(o)}${oi===a?" ✓":""}</li>`).join("")}</ul>`;
+ return stem+body+(showAns&&k.explanation?`<p class="muted small">${esc(k.explanation)}</p>`:"")}
+/* own pace: the professor steps through the questions on their own screen (students are not moved) */
+function lgQViewer(g,pl){const d=LG.qs;if(!d||!Array.isArray(d.questions)||!d.questions.length)return "";const n=d.questions.length;
+ if(LG.qv==null){const cnt={};pl.forEach(p=>{if(p.q_started_at&&p.q_index<n)cnt[p.q_index]=(cnt[p.q_index]||0)+1});const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];LG.qv=top?+top[0]:0}
+ const i=Math.max(0,Math.min(n-1,LG.qv)),q=d.questions[i],k=(d.keys||[])[i]||{};
+ let on=0,tried=0,right=0,closed=0;pl.forEach(p=>{const ch=(p.marks||"")[i];if(p.q_started_at&&p.q_index===i)on++;if("cxo".includes(ch||"_"))tried++;if(ch==="c")right++;if("cx-".includes(ch||"_"))closed++});
+ return `<div class="card lg-qview"><div class="lg-qvhead"><button type="button" class="soft" data-act="lgqv" data-d="-1" ${i<=0?"disabled":""} aria-label="Previous question">‹ Prev</button><b>Question ${i+1} of ${n}</b><button type="button" class="soft" data-act="lgqv" data-d="1" ${i>=n-1?"disabled":""} aria-label="Next question">Next ›</button></div>
+ ${lgQBody(q,k,!!LG.qvAns)}
+ <div class="lg-qvstats"><span><b>${on}</b> on it now</span><span><b>${tried}</b> answered</span><span><b>${right}</b> right${closed?` (${Math.round(100*right/closed)}%)`:""}</span></div>
+ <div class="actions" style="margin:0"><button type="button" class="outline" data-act="lgqvans">${LG.qvAns?"Hide answer":"Show answer"}</button></div>
+ <p class="muted small">Only your screen changes. Students keep moving at their own pace.</p></div>`}
 function lgQList(g,pl){const d=LG.qs;if(!d||!Array.isArray(d.questions))return "";const keys=d.keys||[];
  const items=d.questions.map((q,i)=>{const k=keys[i]||{},a=k.answer;let c=0,f=0,t=0;pl.forEach(p=>{const ch=(p.marks||"")[i];if(ch==="c")c++;if("cx-".includes(ch||"_"))f++;if("cxo".includes(ch||"_"))t++});
-  const labels=q.type==="tf"?["True","False"]:q.type==="ar"?AR_OPTS:q.options||[];
-  const stem=q.type==="ar"?`<div><b>Assertion:</b> ${esc(q.assertion||"")}</div><div><b>Reason:</b> ${esc(q.reason||"")}</div>`:`<div>${esc(q.q||"")}</div>`;
-  const body=q.type==="match"?`<ul class="lg-qopts">${(q.left||[]).map((l,li)=>`<li class="ok">${esc(l)} → ${esc((q.right||[])[Array.isArray(a)?a[li]:-1]??"?")}</li>`).join("")}</ul>`
-   :`<ul class="lg-qopts">${labels.map((o,oi)=>`<li class="${oi===a?"ok":""}"><b>${"ABCD"[oi]}</b> ${esc(o)}${oi===a?" ✓":""}</li>`).join("")}</ul>`;
   const now=(!g.self_paced&&g.phase!=="ended"&&i===g.q_index)?' <span class="badge">On screen now</span>':"";
-  return `<li><div class="lg-qhead"><b>Q${i+1}</b>${now}<span class="muted small">${t} attempted${f?` · ${Math.round(100*c/f)}% right`:""}</span></div>${stem}${body}${k.explanation?`<p class="muted small">${esc(k.explanation)}</p>`:""}</li>`}).join("");
+  return `<li><div class="lg-qhead"><b>Q${i+1}</b>${now}<span class="muted small">${t} attempted${f?` · ${Math.round(100*c/f)}% right`:""}</span></div>${lgQBody(q,k,true)}</li>`}).join("");
  return `<details class="card lg-qlist" data-lgd="qlist" ${LG.open_qlist?"open":""}><summary><b>All ${d.questions.length} questions with answers</b> <span class="muted small">Keep this closed while the screen is projected</span></summary><ol>${items}</ol></details>`}
 const lgPauseBtn=g=>g.paused_at?'<button class="primary big-btn" data-act="lgpause" data-v="0">▶ Resume quiz</button>':'<button class="outline" data-act="lgpause" data-v="1">⏸ Pause</button>';
 const lgPausedBanner=g=>g.paused_at?'<div class="lg-paused" role="status">⏸ Quiz paused. Students cannot answer and every timer is stopped.</div>':"";
@@ -1537,7 +1548,7 @@ async function hostPage(){
  if(!LG||LG.id!==R().id){LG={id:R().id,host:true};await lgPull()}
  const g=LG.game;if(!g){LG=null;return '<div class="card">This live quiz has ended.</div>'}
  S.after=()=>{lgLoop();const w=document.querySelector(".lg-gridwrap");if(w&&LG?.gx)w.scrollLeft=LG.gx};const pl=LG.players;
- const mode=`<div class="lg-mode" role="radiogroup" aria-label="How the questions move"><button type="button" role="radio" aria-checked="${!!g.self_paced}" class="${g.self_paced?"on":""}" data-act="lgmode" data-v="1"><b>Own pace</b><span>Every student starts from question 1, even if they join late</span></button><button type="button" role="radio" aria-checked="${!g.self_paced}" class="${g.self_paced?"":"on"}" data-act="lgmode" data-v="0"><b>Together</b><span>You move the whole class to the next question</span></button></div>`;
+ const mode=`<div class="lg-mode" role="radiogroup" aria-label="How the questions move"><button type="button" role="radio" aria-checked="${!!g.self_paced}" class="${g.self_paced?"on":""}" data-act="lgmode" data-v="1"><b>${g.self_paced?"✓ Selected: ":""}Own pace</b><span>Every student starts from question 1, even if they join late</span></button><button type="button" role="radio" aria-checked="${!g.self_paced}" class="${g.self_paced?"":"on"}" data-act="lgmode" data-v="0"><b>${g.self_paced?"":"✓ Selected: "}Together</b><span>You move the whole class with Next, Pause and Show answer</span></button></div>`;
  if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ · ${esc(g.title||"")}</div><p>Students open <b>Join Live</b> on the website and type this code</p>${lgCodeTiles(g)}${mode}
   <div class="lg-players"><b>${pl.length}</b> joined${pl.length?`<div class="namecloud">${pl.map(p=>`<span>${esc(p.name||"")}</span>`).join("")}</div>`:""}</div><div class="actions"><button class="primary big-btn" data-act="lgstep" data-a="next" ${pl.length?"":"disabled"}>Start quiz</button><button class="outline" data-act="lgstep" data-a="end">Cancel</button></div></div>`;
  if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>Final results</h1>${podium(pl,10)}<div class="actions lg-endact"><button class="primary" data-act="lgclose">Back to My library</button>${g.collect_profile?`<button class="soft" data-act="lgcsv" data-id="${g.id}">Download guest data (CSV)</button>${LG.report?"":`<button class="soft" data-act="lgreport" data-id="${g.id}">View guest data report</button>`}`:""}</div>${g.collect_profile&&LG.report?guestReportHTML(LG.report):""}${lgStudents(g,pl)}${lgGrid(g,pl)}${lgQList(g,pl)}</div><div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`;
@@ -1545,7 +1556,8 @@ async function hostPage(){
   return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ · OWN PACE · ${esc(g.title||"")}</div><p>Late? Students can still join with this code. They start from question 1.</p>${lgCodeTiles(g)}
   <div class="lg-players"><b>${pl.length}</b> joined · <b>${fin}</b> finished</div>${lgPausedBanner(g)}
   <div class="actions">${lgPauseBtn(g)}<button class="primary big-btn" data-act="lgstep" data-a="end">End quiz and show results</button></div>
-  <p class="muted small">Own pace: each student moves to the next question on their own. To move the whole class yourself, choose <b>Together</b> when you start the next quiz.</p>
+  ${lgQViewer(g,pl)}
+  <p class="muted small">Own pace: each student moves to the next question on their own. To move the whole class with one Next button, choose <b>Together</b> in the waiting room before you press Start.</p>
   ${lgStudents(g,pl)}${lgGrid(g,pl)}${lgQList(g,pl)}</div>`}
  return `<div class="lg-stage"><div class="row"><span class="badge">Question ${g.q_index+1} of ${g.n}</span><span class="badge lg-codebadge">Code ${esc(g.code)}</span>${g.phase==="question"?`<span class="lg-timer"><b id="lgSec">${Math.ceil(lgLeft(g))}</b>s</span>`:'<span class="badge">Answer</span>'}<span class="muted small">${pl.length} players</span></div>
   ${g.phase==="question"?`<div class="bar lgbar"><i id="lgBar" style="width:${100*lgLeft(g)/g.seconds}%"></i></div>`:""}${lgPausedBanner(g)}${lgQuestion(g)}
@@ -1626,6 +1638,8 @@ function guestReportHTML(rows,total){
 Object.assign(ACT,{
  async libhost(el){const g=await hostLive({p_activity:el.dataset.id,p_seconds:20,p_self_paced:false});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},
  async lgstep(el){if(el.dataset.a==="end"&&!confirm("End this live quiz now?"))return;await rpc("live_step",{p_game:LG.id,p_action:el.dataset.a});await lgPull();if(el.dataset.a==="end"&&LG.game?.q_index<0){stopTimers();LG=null;return setR({})}render()},
+ lgqv(el){if(!LG)return;LG.qv=(LG.qv||0)+(+el.dataset.d);LG.qvAns=false;render()},
+ lgqvans(){if(!LG)return;LG.qvAns=!LG.qvAns;render()},
  async lgpause(el){const v=el.dataset.v==="1";const r=await db.rpc("live_pause",{p_game:LG.id,p_pause:v});
   if(r.error){toast(/function|schema cache|PGRST202/i.test(`${r.error.message} ${r.error.code}`)?"Pause needs the database update: run schema_v15.sql in Supabase.":r.error.message);return}
   await lgPull();render();toast(v?"Quiz paused.":"Quiz resumed.")},

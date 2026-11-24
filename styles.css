@@ -676,3 +676,9 @@ body.mood-on.m-night header{background:linear-gradient(120deg,rgba(255,255,255,.
 .lg-gridwrap{max-width:100%}
 @media(max-width:560px){.lg-prog .bar{display:none}.lg-prog td:first-child{min-width:84px}}
 @media(max-width:560px){.lg-prog th{white-space:normal}.lg-prog .guesttag{display:block;width:max-content;margin-top:2px}.lg-prog td{padding:7px 4px}}
+.lg-qview{display:grid;gap:10px}
+.lg-qvhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lg-qvhead b{font-size:15px}.lg-qvhead .soft{padding:8px 12px;min-height:0}
+.lg-qstem{font-weight:700;font-size:17px;line-height:1.35}
+.lg-qvstats{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;color:#5b6380}.lg-qvstats b{color:var(--ink);font-size:16px}
+.lg-qview .outline{color:#40378e!important;border-color:#c9c4ff!important}
