@@ -668,3 +668,11 @@ body.mood-on.m-night header{background:linear-gradient(120deg,rgba(255,255,255,.
 .lg-grid tbody th,.lg-grid tfoot th{text-transform:none;letter-spacing:0;font-weight:700;color:var(--ink);font-size:13px}
 .lg-stage .lg-paused~.tiles .tile{opacity:.55;filter:saturate(.6)}
 @media(max-width:560px){.lg-prog{font-size:13px}.lg-prog th{font-size:10px;letter-spacing:.3px;padding:6px 5px}.lg-prog td{padding:7px 5px}.lg-prog .bar{max-width:80px}.lv{font-size:11px;padding:2px 7px;white-space:normal}.lg-progcard{max-height:none}}
+/* wide tables (25+ questions) scroll inside their own card instead of stretching the quiz panel off the phone screen */
+.lg-stage{grid-template-columns:minmax(0,1fr)}
+.lg-stage>*{min-width:0;max-width:100%}
+.lg-progcard,.lg-gridcard,.lg-qlist{max-width:100%;min-width:0;overflow:hidden}
+.lg-progcard{overflow-x:auto}
+.lg-gridwrap{max-width:100%}
+@media(max-width:560px){.lg-prog .bar{display:none}.lg-prog td:first-child{min-width:84px}}
+@media(max-width:560px){.lg-prog th{white-space:normal}.lg-prog .guesttag{display:block;width:max-content;margin-top:2px}.lg-prog td{padding:7px 4px}}
