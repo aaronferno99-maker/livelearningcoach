@@ -587,3 +587,22 @@ body.mood-on.m-night header{background:linear-gradient(120deg,rgba(255,255,255,.
 .social{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:999px;font-weight:700;font-size:13px;text-decoration:none;color:#fff}
 .social.li{background:#0a66c2}.social.wa{background:#25d366;color:#073b1d}
 .social:hover{filter:brightness(1.08)}
+
+/* v10: Join Live tile on phones, placed before the date, highlighted and blinking */
+.tele-join{display:none}
+@media(max-width:800px){
+  .live-telemetry .tele-join{display:flex;grid-column:1/-1;width:100%;text-align:left;cursor:pointer;border:0!important;color:#fff;
+    background:linear-gradient(120deg,#e11d48,#f97316)!important;box-shadow:0 0 0 0 rgba(244,63,94,.6),0 10px 24px rgba(225,29,72,.35);
+    animation:joinBlink 1s ease-in-out infinite}
+  .tele-join .tele-icon{background:rgba(255,255,255,.22)}
+  .tele-join small{color:#ffe4e6!important}
+  .tele-join strong{color:#fff!important;font:800 19px Manrope!important;letter-spacing:.3px}
+  .tele-join .join-arrow{margin-left:auto;font-size:22px;font-weight:800}
+  .tele-join .join-dot{width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 0 0 0 rgba(255,255,255,.8);animation:joinDot 1s ease-out infinite}
+  .tele-join:active{transform:scale(.98)}
+}
+@keyframes joinBlink{
+  0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(244,63,94,.65),0 10px 24px rgba(225,29,72,.35);filter:brightness(1.1)}
+  50%{opacity:.45;box-shadow:0 0 0 10px rgba(244,63,94,0),0 6px 14px rgba(225,29,72,.2);filter:brightness(.95)}
+}
+@keyframes joinDot{0%{box-shadow:0 0 0 0 rgba(255,255,255,.85)}100%{box-shadow:0 0 0 10px rgba(255,255,255,0)}}
