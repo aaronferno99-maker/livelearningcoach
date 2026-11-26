@@ -1325,14 +1325,37 @@ async function resultsPage(id){
 /* ---------- Results of a live quiz: overall summary, every participant, select and remove ---------- */
 let LIVERES={};const RSEL={}; /* game id -> live run, game id -> Set of selected player ids */
 const lgSortPl=pl=>[...(pl||[])].sort((a,b)=>lgKey(a.name).localeCompare(lgKey(b.name),undefined,{numeric:true}));
+/* Sort and Show filters for the participants table (results page and guest data report) */
+const RVIEW={}; /* game id -> {sort,show} */
+const RS_SORTS=[["roll","Roll / department no. (in order)"],["marks_d","Marks & %: highest to lowest"],["marks_a","Marks & %: lowest to highest"],["conf_d","Confidence: highest to lowest"],["conf_a","Confidence: lowest to highest"],["ans_d","Questions answered: most first"],["name","Name A to Z"]];
+const RS_SHOWS=[["all","Everyone"],["answered","Answered at least one"],["noans","No answers"],["pass","50% and above"],["fail","Below 50%"],["high","High confidence (8-10)"],["neutral","Neutral confidence (4-7)"],["low","Low confidence (1-3)"],["noconf","Confidence not given"]];
+const rsRoll=p=>lgKey(p.research_id||p.student_no||p.name);
+function rsView(gid,rows,n){const v=RVIEW[gid]||{sort:"roll",show:"all"};
+ const tot=p=>n||p.total||0,pct=p=>tot(p)?(p.marks||0)/tot(p):0,c=p=>p.avg_confidence==null?null:+p.avg_confidence,ans=p=>p.answered??(p.marks!=null?1:0);
+ const keep={all:()=>true,answered:p=>ans(p)>0,noans:p=>!ans(p),pass:p=>ans(p)>0&&pct(p)>=.5,fail:p=>ans(p)>0&&pct(p)<.5,
+  high:p=>c(p)!=null&&c(p)>=8,neutral:p=>c(p)!=null&&c(p)>3&&c(p)<8,low:p=>c(p)!=null&&c(p)<=3,noconf:p=>c(p)==null}[v.show]||(()=>true);
+ const byRoll=(a,b)=>rsRoll(a).localeCompare(rsRoll(b),undefined,{numeric:true});
+ const nulls=(x,y,dir)=>x==null&&y==null?0:x==null?1:y==null?-1:dir*(x-y); /* people without a value always go last */
+ const cmp={roll:byRoll,name:(a,b)=>String(a.name||"").localeCompare(String(b.name||""),undefined,{numeric:true,sensitivity:"base"}),
+  marks_d:(a,b)=>pct(b)-pct(a)||(b.marks||0)-(a.marks||0)||nulls(c(a),c(b),-1),marks_a:(a,b)=>pct(a)-pct(b)||(a.marks||0)-(b.marks||0),
+  conf_d:(a,b)=>nulls(c(a),c(b),-1),conf_a:(a,b)=>nulls(c(a),c(b),1),ans_d:(a,b)=>ans(b)-ans(a)}[v.sort]||byRoll;
+ return [...(rows||[])].filter(keep).sort((a,b)=>cmp(a,b)||byRoll(a,b))}
+function rsCtl(gid,shown,all){const v=RVIEW[gid]||{sort:"roll",show:"all"};
+ return `<div class="rs-filter"><label>Sort by<select data-chg="rssort" data-g="${gid}">${RS_SORTS.map(([k,t])=>`<option value="${k}" ${v.sort===k?"selected":""}>${t}</option>`).join("")}</select></label>
+ <label>Show<select data-chg="rsshow" data-g="${gid}">${RS_SHOWS.map(([k,t])=>`<option value="${k}" ${v.show===k?"selected":""}>${t}</option>`).join("")}</select></label>
+ <span class="muted small">Showing ${shown} of ${all}${v.show!=="all"||v.sort!=="roll"?` · <button type="button" class="rs-clear" data-act="rsreset" data-g="${gid}">Clear</button>`:""}</span></div>`}
+function rsRedraw(gid){const el=$("run-"+gid);if(!el)return;const g=LIVERES[gid];if(!g)return;
+ const x=g.report?guestReportHTML(g.report.rows,g.report.total,gid):liveRunHTML(g);const t=document.createElement("div");t.innerHTML=x;el.replaceWith(t.firstElementChild)}
+CHG.rssort=el=>{(RVIEW[el.dataset.g]||(RVIEW[el.dataset.g]={sort:"roll",show:"all"})).sort=el.value;rsRedraw(el.dataset.g)};
+CHG.rsshow=el=>{(RVIEW[el.dataset.g]||(RVIEW[el.dataset.g]={sort:"roll",show:"all"})).show=el.value;rsRedraw(el.dataset.g)};
 function liveRunHTML(g){
  const n=g.n||0,pl=lgSortPl(g.players),sel=RSEL[g.id]||(RSEL[g.id]=new Set());
  [...sel].forEach(x=>{if(!pl.some(p=>p.player_id===x))sel.delete(x)});
  const took=pl.filter(p=>p.answered>0),mk=took.map(p=>p.marks),conf=took.filter(p=>p.avg_confidence!=null).map(p=>+p.avg_confidence);
  const cnt={};pl.forEach(p=>{const k=lgKey(p.name);cnt[k]=(cnt[k]||0)+1});const nDup=pl.filter(p=>cnt[lgKey(p.name)]>1).length;
  const perQ=[...Array(n).keys()].map(i=>{let c=0,t=0;took.forEach(p=>{const ch=(p.marks_str||"")[i];if(ch==="c")c++;if(ch==="c"||ch==="x")t++});return {c,t}});
- const prof=g.collect_profile,av=mean(mk);
- const rows=pl.map((p,i)=>`<tr class="${sel.has(p.player_id)?"rsel":""}${p.answered?"":" noans"}"><td><input type="checkbox" data-chg="rsel" data-g="${g.id}" data-p="${p.player_id}" ${sel.has(p.player_id)?"checked":""} aria-label="Select ${esc(p.name||"")}"></td><td>${i+1}</td><td>${esc(p.name||"")}${cnt[lgKey(p.name)]>1?' <small class="dupetag">repeated</small>':""}</td><td>${esc(p.research_id||p.student_no||"-")}</td><td>${p.is_guest?"Guest":"Registered"}</td><td>${p.answered}/${n}</td><td><b>${p.marks}</b>/${n}</td><td>${p.answered?Math.round(100*p.marks/(n||1))+"%":"-"}</td><td>${p.score}</td>${g.ask_confidence?`<td>${p.avg_confidence??"-"}</td>`:""}${prof?`<td>${esc(p.g_subject||"-")}</td><td>${esc(p.g_study_level||"-")}</td><td>${p.g_year??"-"}</td><td>${esc(p.g_locality||"-")}</td><td>${esc(p.g_gender||"-")}</td><td>${esc(p.g_native||"-")}</td><td>${p.g_consent==null?"-":p.g_consent?"Yes":"No"}</td>`:""}</tr>`).join("");
+ const prof=g.collect_profile,av=mean(mk),view=rsView(g.id,pl,n);
+ const rows=view.map((p,i)=>`<tr class="${sel.has(p.player_id)?"rsel":""}${p.answered?"":" noans"}"><td><input type="checkbox" data-chg="rsel" data-g="${g.id}" data-p="${p.player_id}" ${sel.has(p.player_id)?"checked":""} aria-label="Select ${esc(p.name||"")}"></td><td>${i+1}</td><td>${esc(p.name||"")}${cnt[lgKey(p.name)]>1?' <small class="dupetag">repeated</small>':""}</td><td>${esc(p.research_id||p.student_no||"-")}</td><td>${p.is_guest?"Guest":"Registered"}</td><td>${p.answered}/${n}</td><td><b>${p.marks}</b>/${n}</td><td>${p.answered?Math.round(100*p.marks/(n||1))+"%":"-"}</td><td>${p.score}</td>${g.ask_confidence?`<td>${p.avg_confidence??"-"}</td>`:""}${prof?`<td>${esc(p.g_subject||"-")}</td><td>${esc(p.g_study_level||"-")}</td><td>${p.g_year??"-"}</td><td>${esc(p.g_locality||"-")}</td><td>${esc(p.g_gender||"-")}</td><td>${esc(p.g_native||"-")}</td><td>${p.g_consent==null?"-":p.g_consent?"Yes":"No"}</td>`:""}</tr>`).join("");
  const cols=9+(g.ask_confidence?1:0)+(prof?7:0);
  return `<div class="card stack liverun" id="run-${g.id}">
  <div><b>Live run · ${fmtDT(g.created_at)}</b><div class="muted small">Code ${esc(g.code||"")} · ${g.self_paced?"Own pace":"Together"} · ${g.phase==="ended"?"Finished":"Still running"}${g.host_name?` · hosted by ${esc(g.host_name)}`:""}</div></div>
@@ -1345,17 +1368,18 @@ function liveRunHTML(g){
  </div>
  ${n?`<details class="rs-perq"><summary><b>Question by question</b> <span class="muted small">% of students who got each question right</span></summary><div style="overflow:auto"><table><thead><tr><th>Question</th>${perQ.map((_,i)=>`<th>Q${i+1}</th>`).join("")}</tr></thead><tbody><tr><th>Right</th>${perQ.map(q=>`<td>${q.t?Math.round(100*q.c/q.t)+"%":"-"}</td>`).join("")}</tr><tr><th>Answered</th>${perQ.map(q=>`<td>${q.t}</td>`).join("")}</tr></tbody></table></div></details>`:""}
  ${nDup?`<p class="rs-warn">${nDup} rows share a name with another row (marked <b>repeated</b>). Use <b>Select repeated names</b> to pick the extra copies, keeping the one with the most answers.</p>`:""}
+ ${rsCtl(g.id,view.length,pl.length)}
  <div class="actions rs-acts"><span class="muted small">Select:</span><button class="soft" data-act="rsmark" data-g="${g.id}" data-m="all">All</button><button class="soft" data-act="rsmark" data-g="${g.id}" data-m="none">None</button><button class="soft" data-act="rsmark" data-g="${g.id}" data-m="empty">No answers</button>${nDup?`<button class="soft" data-act="rsmark" data-g="${g.id}" data-m="dupe">Repeated names</button>`:""}
   <button class="outline danger" data-act="rsremove" data-g="${g.id}" id="rsrm-${g.id}" ${sel.size?"":"disabled"}>Remove selected (${sel.size})</button><button class="soft" data-act="rscsv" data-g="${g.id}">Download CSV</button></div>
  <div style="overflow:auto"><table class="rs-table"><thead><tr><th><span class="sr-only">Select</span></th><th>S.No</th><th>Name</th><th>Roll no. / Research ID</th><th>Type</th><th>Answered</th><th>Marks</th><th>%</th><th>Points</th>${g.ask_confidence?"<th>Confidence (1-10)</th>":""}${prof?"<th>Subject</th><th>Study level</th><th>Year</th><th>Rural/Urban</th><th>Gender</th><th>Native</th><th>Consent</th>":""}</tr></thead>
- <tbody>${rows||`<tr><td colspan="${cols}" class="muted">Nobody joined this run.</td></tr>`}</tbody></table></div></div>`}
+ <tbody>${rows||`<tr><td colspan="${cols}" class="muted">${pl.length?"Nobody matches this filter.":"Nobody joined this run."}</td></tr>`}</tbody></table></div></div>`}
 function rsSync(gid){const sel=RSEL[gid]||new Set(),b=$("rsrm-"+gid);if(b){b.disabled=!sel.size;b.textContent=`Remove selected (${sel.size})`}
  document.querySelectorAll(`#run-${CSS.escape(gid)} input[data-chg="rsel"]`).forEach(c=>{c.checked=sel.has(c.dataset.p);c.closest("tr")?.classList.toggle("rsel",c.checked)})}
 CHG.rsel=el=>{const sel=RSEL[el.dataset.g]||(RSEL[el.dataset.g]=new Set());el.checked?sel.add(el.dataset.p):sel.delete(el.dataset.p);rsSync(el.dataset.g)};
 Object.assign(ACT,{
  rsback(){setR({lcat:R().lcat})},
  rsmark(el){const g=LIVERES[el.dataset.g];if(!g)return;const pl=g.players||[],sel=RSEL[g.id]=new Set(),m=el.dataset.m;
-  if(m==="all")pl.forEach(p=>sel.add(p.player_id));
+  if(m==="all")rsView(g.id,pl,g.n).forEach(p=>sel.add(p.player_id));
   else if(m==="empty")pl.filter(p=>!p.answered).forEach(p=>sel.add(p.player_id));
   else if(m==="dupe"){const grp={};pl.forEach(p=>(grp[lgKey(p.name)]||(grp[lgKey(p.name)]=[])).push(p));
    Object.values(grp).filter(x=>x.length>1).forEach(x=>{x.sort((a,b)=>b.answered-a.answered||b.marks-a.marks||b.score-a.score);x.slice(1).forEach(p=>sel.add(p.player_id))})}
@@ -1366,7 +1390,8 @@ Object.assign(ACT,{
   const r=await db.rpc("live_remove_players",{p_game:g.id,p_players:[...sel]});if(r.error)return toast(v16msg(r.error));
   RSEL[g.id]=new Set();toast(`${r.data} player(s) removed.`);
   if(LG?.host&&LG.id===g.id){LG.sig=null;await lgPull();if(LG.report)LG.report=await rpc("live_guest_csv",{p_game:g.id})}render()},
- rscsv(el){const g=LIVERES[el.dataset.g];if(!g)return;const n=g.n||0,pl=lgSortPl(g.players),prof=g.collect_profile;
+ rsreset(el){RVIEW[el.dataset.g]={sort:"roll",show:"all"};rsRedraw(el.dataset.g)},
+ rscsv(el){const g=LIVERES[el.dataset.g];if(!g)return;const n=g.n||0,pl=rsView(g.id,g.players,n),prof=g.collect_profile;
   const head=["S.No","Name","Roll no. / Research ID","Type","Answered","Marks","Total","%","Points",...(g.ask_confidence?["Avg confidence (1-10)"]:[]),...(prof?["Subject","Study level","Year","Rural/Urban","Gender","Native","Consent"]:[]),...[...Array(n).keys()].map(i=>`Q${i+1}`)];
   const lab={c:"Right",x:"Wrong","-":"No answer"};
   download(`live_results_${String(g.title||"quiz").replace(/[^a-z0-9]+/gi,"_")}_${String(g.created_at||"").slice(0,10)}_${g.code||""}.csv`,"﻿"+[csvLine(head),...pl.map((p,i)=>csvLine([i+1,p.name||"",p.research_id||p.student_no||"",p.is_guest?"Guest":"Registered",p.answered,p.marks,n,p.answered?Math.round(100*p.marks/(n||1)):"",p.score,...(g.ask_confidence?[p.avg_confidence??""]:[]),...(prof?[p.g_subject||"",p.g_study_level||"",p.g_year??"",p.g_locality||"",p.g_gender||"",p.g_native||"",p.g_consent==null?"":p.g_consent?"Yes":"No"]:[]),...[...(p.marks_str||"")].map(ch=>lab[ch]||"")]))].join("\r\n"))}});
@@ -1676,7 +1701,8 @@ const confBand=v=>v==null?null:v<=3?"Low confidence":v<=7?"Neutral":"High confid
    live_guest_csv RPC (host-only; exact marks, not the gamified score). */
 function guestReportHTML(rows,total,gid){
  rows=lgSortPl(rows);const can=!!gid&&rows.some(r=>r.player_id),sel=can?(RSEL[gid]||(RSEL[gid]=new Set())):null;
- if(can)LIVERES[gid]={id:gid,players:rows.map(r=>({...r,score:0,answered:r.answered??0,marks:r.marks??0}))};
+ if(gid)LIVERES[gid]={id:gid,report:{rows,total},players:rows.map(r=>({...r,score:0,answered:r.answered??0,marks:r.marks??0}))};
+ const view=gid?rsView(gid,rows,0):rows;
  const cnt={};rows.forEach(p=>{const k=lgKey(p.name);cnt[k]=(cnt[k]||0)+1});const nDup=rows.filter(p=>cnt[lgKey(p.name)]>1).length;
  const withConf=rows.filter(r=>r.avg_confidence!=null);
  const bandCounts={"Low confidence":0,"Neutral":0,"High confidence":0};
@@ -1684,7 +1710,7 @@ function guestReportHTML(rows,total,gid){
  const avgMarks=rows.length?mean(rows.map(r=>r.marks||0)):0;
  const avgConf=withConf.length?mean(withConf.map(r=>r.avg_confidence)):null;
  const tot=total??rows.find(r=>r.total!=null)?.total;
- return `<div class="card stack" style="margin-top:18px;text-align:left"${can?` id="run-${gid}"`:""}>
+ return `<div class="card stack" style="margin-top:18px;text-align:left"${gid?` id="run-${gid}"`:""}>
   <h3>Overall report</h3>
   <div class="form-grid">
    <div class="statbox"><b>${fx(avgMarks,1)}${tot?` / ${tot}`:""}</b><span>Average marks</span></div>
@@ -1694,9 +1720,10 @@ function guestReportHTML(rows,total,gid){
    <div class="statbox"><b>${bandCounts["High confidence"]}</b><span>High confidence (8-10)</span></div>
   </div>
   <h3>Participants (${rows.length})</h3>
+  ${gid?rsCtl(gid,view.length,rows.length):""}
   ${can?`<div class="actions rs-acts"><span class="muted small">Select:</span><button class="soft" data-act="rsmark" data-g="${gid}" data-m="all">All</button><button class="soft" data-act="rsmark" data-g="${gid}" data-m="none">None</button><button class="soft" data-act="rsmark" data-g="${gid}" data-m="empty">No answers</button>${nDup?`<button class="soft" data-act="rsmark" data-g="${gid}" data-m="dupe">Repeated names</button>`:""}<button class="outline danger" data-act="rsremove" data-g="${gid}" id="rsrm-${gid}" ${sel.size?"":"disabled"}>Remove selected (${sel.size})</button></div>`:""}
   <div style="overflow:auto"><table class="rs-table"><thead><tr>${can?'<th><span class="sr-only">Select</span></th>':""}<th>S.No</th><th>Name</th><th>Guest</th><th>Marks</th><th>Subject</th><th>Study level</th><th>Year</th><th>Rural/Urban</th><th>Gender</th><th>Native</th><th>Consent</th><th>Confidence (1-10)</th><th>Band</th></tr></thead><tbody>
-  ${rows.map((p,i)=>`<tr class="${can&&sel.has(p.player_id)?"rsel":""}">${can?`<td><input type="checkbox" data-chg="rsel" data-g="${gid}" data-p="${p.player_id}" ${sel.has(p.player_id)?"checked":""} aria-label="Select ${esc(p.name||"")}"></td>`:""}<td>${i+1}</td><td>${esc(p.name||"")}${cnt[lgKey(p.name)]>1?' <small class="dupetag">repeated</small>':""}</td><td>${p.is_guest?"Yes":"No"}</td><td>${p.marks??"-"}${p.total?` / ${p.total}`:""}</td><td>${esc(p.g_subject||"-")}</td><td>${esc(p.g_study_level||"-")}</td><td>${p.g_year??"-"}</td><td>${esc(p.g_locality||"-")}</td><td>${esc(p.g_gender||"-")}</td><td>${esc(p.g_native||"-")}</td><td>${p.g_consent?"Yes":"No"}</td><td>${p.avg_confidence??"-"}</td><td>${confBand(p.avg_confidence)||"-"}</td></tr>`).join("")||'<tr><td colspan="14" class="muted">No participants yet.</td></tr>'}
+  ${view.map((p,i)=>`<tr class="${can&&sel.has(p.player_id)?"rsel":""}">${can?`<td><input type="checkbox" data-chg="rsel" data-g="${gid}" data-p="${p.player_id}" ${sel.has(p.player_id)?"checked":""} aria-label="Select ${esc(p.name||"")}"></td>`:""}<td>${i+1}</td><td>${esc(p.name||"")}${cnt[lgKey(p.name)]>1?' <small class="dupetag">repeated</small>':""}</td><td>${p.is_guest?"Yes":"No"}</td><td>${p.marks??"-"}${p.total?` / ${p.total}`:""}</td><td>${esc(p.g_subject||"-")}</td><td>${esc(p.g_study_level||"-")}</td><td>${p.g_year??"-"}</td><td>${esc(p.g_locality||"-")}</td><td>${esc(p.g_gender||"-")}</td><td>${esc(p.g_native||"-")}</td><td>${p.g_consent?"Yes":"No"}</td><td>${p.avg_confidence??"-"}</td><td>${confBand(p.avg_confidence)||"-"}</td></tr>`).join("")||`<tr><td colspan="14" class="muted">${rows.length?"Nobody matches this filter.":"No participants yet."}</td></tr>`}
   </tbody></table></div></div>`}
 Object.assign(ACT,{
  async libhost(el){const g=await hostLive({p_activity:el.dataset.id,p_seconds:20,p_self_paced:false});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},

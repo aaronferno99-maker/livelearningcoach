@@ -696,3 +696,8 @@ body.mood-on.m-night header{background:linear-gradient(120deg,rgba(255,255,255,.
 .rs-perq summary{cursor:pointer}.rs-perq table td,.rs-perq table th{text-align:center;padding:6px 8px}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .rs-warn{margin:0;background:#fff4e0;border:1px solid #f3d29a;color:#7a4a00;border-radius:12px;padding:10px 14px;font-size:14px}
+/* v20: sort and show filters for results */
+.rs-filter{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end;background:#f4f2ff;border-radius:14px;padding:10px 12px}
+.rs-filter label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted);min-width:200px;flex:1 1 200px;max-width:320px}
+.rs-filter select{min-height:40px;padding:6px 10px;font-size:14px}.rs-filter>span{flex:1 1 100%}
+.rs-clear{background:none;border:0;padding:0;min-height:0;color:#5b4fd6;font-weight:700;text-decoration:underline;cursor:pointer}
