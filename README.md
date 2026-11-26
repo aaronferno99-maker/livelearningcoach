@@ -58,3 +58,6 @@ Questionnaire statements: one per line; add `| R` for positively worded (reverse
    - **Select and remove players** from a live run (All · No answers · Repeated names · Remove selected), and × to remove someone from the waiting room.
    - **Cohort → Remove** deletes a registered student who is not part of the research (account and all saved data). Researcher only.
    - **S.No** column in Results, guest data report, cohort, the professor's live table and the CSVs.
+
+## v17: the researcher sees every live quiz in Guest Live Quiz data
+Supabase → SQL Editor → paste `database/schema_v17.sql` → Run. Quizzes hosted from another login (supervisor or professor) now show for the researcher too.
