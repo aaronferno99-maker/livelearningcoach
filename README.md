@@ -48,3 +48,13 @@ Import format (one question per line):
     AR | assertion | reason | answer letter | explanation
     MATCH | instruction | left=right; left=right | explanation
 Questionnaire statements: one per line; add `| R` for positively worded (reverse-scored) statements.
+
+## v16 update: fixes from the first classroom test (26 Nov 2026)
+1. Supabase → SQL Editor → paste `database/schema_v16.sql` (or the shorter `schema_v16_phone.sql`) → Run. Safe to run again.
+2. What changes:
+   - **One name = one player.** A student who presses Join again goes back into the same place. Names are matched without capitals or spaces (25uta104 = 25UTA 104). Ask students to type their roll number.
+   - **Play audio** now shows in the live quiz for questions that have an audio script.
+   - **Results** (My library) shows every live run of the quiz: joined, answered, average / highest / lowest marks, question-by-question % right, every participant with S.No, and a CSV.
+   - **Select and remove players** from a live run (All · No answers · Repeated names · Remove selected), and × to remove someone from the waiting room.
+   - **Cohort → Remove** deletes a registered student who is not part of the research (account and all saved data). Researcher only.
+   - **S.No** column in Results, guest data report, cohort, the professor's live table and the CSVs.

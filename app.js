@@ -559,7 +559,7 @@ async function refreshResults(){
  $("feed").innerHTML=rows.slice(-8).reverse().map(r=>`<div class="activity"><div class="info"><b>${esc(r.participant_name||"Anonymous")}</b><small>${esc(r.answer)}</small></div></div>`).join("");
 }
 function joinPage(inApp){
- return `${inApp?'<div class="head"><div class="eyebrow">LIVE CLASSROOM</div><h1>Join a live activity</h1></div>':'<div class="head"><div class="eyebrow">AUDIENCE</div><h1>Join the conversation</h1><p>Enter the six-digit code from your presenter.</p></div>'}<div class="card stack" style="max-width:560px"><label>Session code<input id="joinCode" inputmode="numeric" maxlength="6" placeholder="482913" style="font:800 28px Manrope;letter-spacing:7px;text-align:center"></label><label>Your name<input id="displayName" value="${esc(profile?.full_name||"")}" placeholder="Needed to join a live quiz" maxlength="40"></label><button class="primary" data-act="lookup">Join</button><p class="muted small">Works for live quizzes and live polls. You do not need to log in.</p><div id="participant"></div></div>`;
+ return `${inApp?'<div class="head"><div class="eyebrow">LIVE CLASSROOM</div><h1>Join a live activity</h1></div>':'<div class="head"><div class="eyebrow">AUDIENCE</div><h1>Join the conversation</h1><p>Enter the six-digit code from your presenter.</p></div>'}<div class="card stack" style="max-width:560px"><label>Session code<input id="joinCode" inputmode="numeric" maxlength="6" placeholder="482913" style="font:800 28px Manrope;letter-spacing:7px;text-align:center"></label><label>Your roll number or name<input id="displayName" value="${esc(profile?.full_name||"")}" placeholder="e.g. 25UTA114" maxlength="40" autocapitalize="characters"></label><button class="primary" data-act="lookup">Join</button><p class="muted small">Works for live quizzes and live polls. You do not need to log in. Type the same roll number every time: if you join again you go back to your own place.</p><div id="participant"></div></div>`;
 }
 Object.assign(FORM,{});
 
@@ -568,7 +568,7 @@ async function cohortTab(){
  const [st,tch,asg]=await Promise.all([roster(),ok(db.from("profiles").select("id,full_name,email,role").in("role",["teacher"])),ok(db.from("teacher_assignments").select("*"))]);
  const can=role()==="researcher";
  return `<div class="head"><div class="eyebrow">COHORT · IDENTITY RECORDS</div><h1>${st.length} student(s)</h1><p>Verify a student to assign a research ID. Identity details stay on this screen; exports use research IDs only.</p></div>
- <div class="card" style="overflow:auto"><table><thead><tr><th>Name</th><th>Mobile</th><th>Email</th><th>Year</th><th>College</th><th>Student no.</th><th>Research ID</th><th>Consent</th><th>Professor</th></tr></thead><tbody>${st.map(s=>{const a=asg.find(x=>x.student_id===s.id);return `<tr><td>${esc(s.full_name)}</td><td>${esc(s.mobile)}</td><td>${esc(s.email)}</td><td>${s.sp.year||"-"}</td><td>${esc(s.sp.college)}</td><td>${esc(s.sp.student_no)}</td><td>${s.sp.research_id?esc(s.sp.research_id):(can?`<button class="soft" data-act="verify" data-id="${s.id}">Verify</button>`:"-")}</td><td>${s.sp.consent_research?"✓":"✗"}</td><td>${can?`<select data-chg="assign" data-id="${s.id}"><option value="">-</option>${tch.map(t=>`<option value="${t.id}" ${a?.teacher_id===t.id?"selected":""}>${esc(t.full_name||t.email)}</option>`).join("")}</select>`:(tch.find(t=>t.id===a?.teacher_id)?.full_name||"-")}</td></tr>`}).join("")||'<tr><td colspan="9" class="muted">No registrations yet.</td></tr>'}</tbody></table></div>
+ <div class="card" style="overflow:auto"><table><thead><tr><th>S.No</th><th>Name</th><th>Mobile</th><th>Email</th><th>Year</th><th>College</th><th>Student no.</th><th>Research ID</th><th>Consent</th><th>Professor</th>${can?"<th>Remove</th>":""}</tr></thead><tbody>${st.map((s,i)=>{const a=asg.find(x=>x.student_id===s.id);return `<tr><td>${i+1}</td><td>${esc(s.full_name)}</td><td>${esc(s.mobile)}</td><td>${esc(s.email)}</td><td>${s.sp.year||"-"}</td><td>${esc(s.sp.college)}</td><td>${esc(s.sp.student_no)}</td><td>${s.sp.research_id?esc(s.sp.research_id):(can?`<button class="soft" data-act="verify" data-id="${s.id}">Verify</button>`:"-")}</td><td>${s.sp.consent_research?"✓":"✗"}</td><td>${can?`<select data-chg="assign" data-id="${s.id}"><option value="">-</option>${tch.map(t=>`<option value="${t.id}" ${a?.teacher_id===t.id?"selected":""}>${esc(t.full_name||t.email)}</option>`).join("")}</select>`:(tch.find(t=>t.id===a?.teacher_id)?.full_name||"-")}</td>${can?`<td><button class="outline danger small-btn" data-act="rmstudent" data-id="${s.id}" data-n="${esc(s.full_name||s.email||"")}" data-e="${esc(s.email||"")}">Remove</button></td>`:""}</tr>`}).join("")||'<tr><td colspan="11" class="muted">No registrations yet.</td></tr>'}</tbody></table></div>
  ${can?`<form data-form="role" class="card stack" style="margin-top:14px"><b>Grant a role to a registered account</b><div class="form-grid"><label>Account email<input name="email" type="email" required></label><label>Role<select name="role"><option value="teacher">Professor</option><option value="researcher">Researcher</option><option value="student">Student</option></select></label></div><button class="primary">Set role</button></form>`:""}`;
 }
 Object.assign(FORM,{async role(f,d){const p=await ok(db.from("profiles").select("id").eq("email",String(d.get("email")).trim()).maybeSingle());if(!p)return toast("No account with that email. Ask them to register first.");await ok(db.rpc("set_role",{p_user:p.id,p_role:d.get("role")}));toast("Role updated.");render()}});
@@ -1200,9 +1200,9 @@ const libSeg=cur=>`<div class="seg" style="margin-bottom:16px">${[["research","R
 /* Shared library row: the same Edit / Preview / Publish / Host live / Results / Duplicate /
    Delete controls everywhere an activity is listed. `extra` appends more buttons (used by
    the Guest Live Quiz data tab to add "View guest data report" alongside them). */
-function libRow(a,cnt={},extra=""){const n=a.kind==="flashcards"?a.cards.length:a.questions.length,tg=null;
+function libRow(a,cnt={},extra="",sub=""){const n=a.kind==="flashcards"?a.cards.length:a.questions.length,tg=null;
  return `<div class="card lib-row"><div class="lib-main"><div class="row"><b>${esc(a.title)}</b><span class="chip ${a.status==="published"?"c-Completed":"c-Inprogress"}">${a.status==="published"?"Published":"Draft"}</span></div>
- <div class="muted small">${KIND[a.kind]}${a.skill?" · "+a.skill:""}${a.segment?" · "+a.segment:""} · ${n} ${a.kind==="flashcards"?"cards":a.kind==="questionnaire"?"statements":"questions"}${tg&&a.kind!=="flashcards"?` (target ${tg})`:""} · ${(cnt[a.id]?.size)||0} students completed</div></div>
+ <div class="muted small">${KIND[a.kind]}${a.skill?" · "+a.skill:""}${a.segment?" · "+a.segment:""} · ${n} ${a.kind==="flashcards"?"cards":a.kind==="questionnaire"?"statements":"questions"}${tg&&a.kind!=="flashcards"?` (target ${tg})`:""} · ${sub||`${(cnt[a.id]?.size)||0} students completed`}</div></div>
  <div class="lib-acts"><button class="soft" data-act="libedit" data-id="${a.id}">Edit</button><button class="soft" data-act="libprev" data-id="${a.id}">Preview</button><button class="soft" data-act="libpub" data-id="${a.id}" data-s="${a.status==="published"?"draft":"published"}">${a.status==="published"?"Unpublish":"Publish"}</button>
  ${["quiz","reading"].includes(a.kind)?`<button class="soft" data-act="libhost" data-id="${a.id}">Host live</button>`:""}<button class="soft" data-act="libres" data-id="${a.id}">Results</button><button class="soft" data-act="libdup" data-id="${a.id}">Duplicate</button><button class="outline danger" data-act="libdel" data-id="${a.id}">Delete</button>${extra}</div></div>`}
 /* "Guest Live Quiz data" folder: every live quiz / poll / wordcloud / open-response session
@@ -1220,7 +1220,7 @@ async function guestDataListPage(){
  <div class="stack">${rows.map(s=>{
   const reportBtn=`<button class="soft" data-act="lgdatareport" data-id="${s.id}" data-k="${s.kind}">View guest data report</button>`;
   const act=s.kind==="live_quiz"?acts[s.activity_id]:null;
-  if(act)return libRow(act,{},reportBtn);
+  if(act)return libRow(act,{},reportBtn,`Live run ${fmtDT(s.created_at)} · code ${esc(s.code)} · ${s.n_participants} joined`);
   return `<div class="card lib-row"><div class="lib-main"><div class="row"><b>${esc(s.title||"Untitled")}</b><span class="chip ${s.is_open?"c-Inprogress":"c-Completed"}">${s.is_open?"Open":"Ended / closed"}</span></div>
   <div class="muted small">${s.kind==="live_quiz"?"Live quiz":"Session"} · Code ${esc(s.code)} · ${s.n_participants} participant(s) · ${fmtDT(s.created_at)}</div></div>
   <div class="lib-acts">${reportBtn}</div></div>`}).join("")||'<div class="empty">No guest details collected yet. Turn on "Collect each participant\'s details" when you host a live quiz, poll, wordcloud or open-response session.</div>'}</div>`}
@@ -1229,7 +1229,7 @@ async function guestReportPage(id,kind){
   const rows=await rpc("live_guest_csv",{p_game:id});
   return `<div class="head"><div class="eyebrow">GUEST LIVE QUIZ DATA</div><h1>Live quiz report</h1></div>
   ${libSeg("guestdata")}<div class="actions" style="margin-bottom:12px"><button class="outline" data-act="libcat" data-c="guestdata">← Back to Guest Live Quiz data</button></div>
-  ${guestReportHTML(rows)}`}
+  ${guestReportHTML(rows,null,id)}`}
  const [s,rows]=await Promise.all([ok(db.from("sessions").select("title,code").eq("id",id).single()),ok(db.from("responses").select("participant_name,is_anonymous,answer,created_at,g_subject,g_study_level,g_year,g_locality,g_gender,g_native,g_consent,confidence").eq("session_id",id))]);
  const withConf=rows.filter(r=>r.confidence!=null);
  const bandCounts={"Low confidence":0,"Neutral":0,"High confidence":0};
@@ -1242,8 +1242,8 @@ async function guestReportPage(id,kind){
   <div class="statbox"><b>${bandCounts["Low confidence"]}</b><span>Low confidence (1-3)</span></div>
   <div class="statbox"><b>${bandCounts["Neutral"]}</b><span>Neutral (4-7)</span></div>
   <div class="statbox"><b>${bandCounts["High confidence"]}</b><span>High confidence (8-10)</span></div></div>
-  <h3>Participants (${rows.length})</h3><div style="overflow:auto"><table><thead><tr><th>Participant</th><th>Anonymous</th><th>Answer</th><th>Subject</th><th>Study level</th><th>Year</th><th>Rural/Urban</th><th>Gender</th><th>Native</th><th>Consent</th><th>Confidence (1-10)</th><th>Band</th><th>Submitted</th></tr></thead><tbody>
-  ${rows.map(r=>`<tr><td>${esc(r.participant_name||"Anonymous")}</td><td>${r.is_anonymous?"Yes":"No"}</td><td>${esc(r.answer||"")}</td><td>${esc(r.g_subject||"-")}</td><td>${esc(r.g_study_level||"-")}</td><td>${r.g_year??"-"}</td><td>${esc(r.g_locality||"-")}</td><td>${esc(r.g_gender||"-")}</td><td>${esc(r.g_native||"-")}</td><td>${r.g_consent?"Yes":"No"}</td><td>${r.confidence??"-"}</td><td>${confBand(r.confidence)||"-"}</td><td>${fmtDT(r.created_at)}</td></tr>`).join("")||'<tr><td colspan="13" class="muted">No submissions yet.</td></tr>'}
+  <h3>Participants (${rows.length})</h3><div style="overflow:auto"><table><thead><tr><th>S.No</th><th>Participant</th><th>Anonymous</th><th>Answer</th><th>Subject</th><th>Study level</th><th>Year</th><th>Rural/Urban</th><th>Gender</th><th>Native</th><th>Consent</th><th>Confidence (1-10)</th><th>Band</th><th>Submitted</th></tr></thead><tbody>
+  ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.participant_name||"Anonymous")}</td><td>${r.is_anonymous?"Yes":"No"}</td><td>${esc(r.answer||"")}</td><td>${esc(r.g_subject||"-")}</td><td>${esc(r.g_study_level||"-")}</td><td>${r.g_year??"-"}</td><td>${esc(r.g_locality||"-")}</td><td>${esc(r.g_gender||"-")}</td><td>${esc(r.g_native||"-")}</td><td>${r.g_consent?"Yes":"No"}</td><td>${r.confidence??"-"}</td><td>${confBand(r.confidence)||"-"}</td><td>${fmtDT(r.created_at)}</td></tr>`).join("")||'<tr><td colspan="14" class="muted">No submissions yet.</td></tr>'}
   </tbody></table></div></div>`}
 async function libraryTab(){
  const r=R();
@@ -1312,11 +1312,64 @@ async function previewPage(){const d=ED?.data;if(!d)return '<div class="card">No
  if(!RUN.st||!RUN.st.preview||RUN.st.act.kind==="questionnaire")RUN.st={phase:"q",preview:true,act:{...d},keys:ED.keys,learn:true,i:0,ans:{},fb:{}};
  return bar+RUN.quiz()}
 async function resultsPage(id){
- const [a,atts,st]=await Promise.all([ok(db.from("activities").select("*").eq("id",id).single()),fetchAll("activity_attempts","*",q=>q.eq("activity_id",id)),roster()]);
+ const [a,atts,st,lr]=await Promise.all([ok(db.from("activities").select("*").eq("id",id).single()),fetchAll("activity_attempts","*",q=>q.eq("activity_id",id)),roster(),db.rpc("live_results",{p_activity:id})]);
  const nm={};st.forEach(s=>nm[s.id]=s);const done=atts.filter(t=>t.status==="done").sort((x,y)=>x.finished_at>y.finished_at?1:-1);const isQ=a.kind==="questionnaire";
- return `<div class="head"><div class="eyebrow">RESULTS</div><h1>${esc(a.title)}</h1><p>${done.length} submissions from ${new Set(done.map(t=>t.student_id)).size} students${!isQ&&done.length?` · average ${fx(mean(done.map(t=>+t.pct)))}%`:""}</p></div>
- <div class="card" style="overflow:auto"><table><thead><tr><th>Student</th>${isQ?"<th>Time point</th><th>Total</th><th>Mean (1–5)</th>":"<th>Attempt</th><th>Score</th><th>%</th><th>Confidence before</th><th>Confidence after</th>"}<th>Submitted</th></tr></thead><tbody>
- ${done.map(t=>`<tr><td>${esc(nm[t.student_id]?.full_name||"Student")}</td>${isQ?`<td>${esc(ctxLabel(t.context))}</td><td>${t.score}/${t.total}</td><td>${fx(+t.detail?.mean,2)}</td>`:`<td>${t.attempt_no}</td><td>${t.score}/${t.total}</td><td>${fx(+t.pct)}</td><td>${t.conf_before??"-"}</td><td>${t.conf_after??"-"}</td>`}<td>${fmtDT(t.finished_at)}</td></tr>`).join("")||'<tr><td colspan="7" class="muted">No submissions yet.</td></tr>'}</tbody></table></div>`}
+ const canLive=["quiz","reading"].includes(a.kind),runs=lr.error?null:(lr.data||[]);LIVERES={};(runs||[]).forEach(g=>LIVERES[g.id]=g);
+ const nLive=(runs||[]).reduce((t,g)=>t+(g.players||[]).length,0);
+ const live=!canLive?"":runs==null?`<div class="card muted">Live quiz results need the database update: run <b>schema_v16.sql</b> in Supabase (SQL Editor).</div>`
+  :runs.length?`<h2 class="rs-h">Live quiz runs (${runs.length})</h2>${runs.map(liveRunHTML).join("")}`:"";
+ const self=`<h2 class="rs-h">${canLive&&runs?.length?"Taken on their own (outside a live quiz)":"Submissions"}</h2><div class="card" style="overflow:auto"><table><thead><tr><th>S.No</th><th>Student</th>${isQ?"<th>Time point</th><th>Total</th><th>Mean (1–5)</th>":"<th>Attempt</th><th>Score</th><th>%</th><th>Confidence before</th><th>Confidence after</th>"}<th>Submitted</th></tr></thead><tbody>
+ ${done.map((t,i)=>`<tr><td>${i+1}</td><td>${esc(nm[t.student_id]?.full_name||"Student")}</td>${isQ?`<td>${esc(ctxLabel(t.context))}</td><td>${t.score}/${t.total}</td><td>${fx(+t.detail?.mean,2)}</td>`:`<td>${t.attempt_no}</td><td>${t.score}/${t.total}</td><td>${fx(+t.pct)}</td><td>${t.conf_before??"-"}</td><td>${t.conf_after??"-"}</td>`}<td>${fmtDT(t.finished_at)}</td></tr>`).join("")||'<tr><td colspan="8" class="muted">No submissions yet.</td></tr>'}</tbody></table></div>`;
+ return `<div class="head"><div class="eyebrow">RESULTS</div><h1>${esc(a.title)}</h1><p>${canLive&&runs?`${runs.length} live run(s) · ${nLive} participant(s) · `:""}${done.length} submissions from ${new Set(done.map(t=>t.student_id)).size} students${!isQ&&done.length?` · average ${fx(mean(done.map(t=>+t.pct)))}%`:""}</p></div>
+ ${live}${canLive&&runs?.length&&!done.length?"":self}`}
+/* ---------- Results of a live quiz: overall summary, every participant, select and remove ---------- */
+let LIVERES={};const RSEL={}; /* game id -> live run, game id -> Set of selected player ids */
+const lgSortPl=pl=>[...(pl||[])].sort((a,b)=>lgKey(a.name).localeCompare(lgKey(b.name),undefined,{numeric:true}));
+function liveRunHTML(g){
+ const n=g.n||0,pl=lgSortPl(g.players),sel=RSEL[g.id]||(RSEL[g.id]=new Set());
+ [...sel].forEach(x=>{if(!pl.some(p=>p.player_id===x))sel.delete(x)});
+ const took=pl.filter(p=>p.answered>0),mk=took.map(p=>p.marks),conf=took.filter(p=>p.avg_confidence!=null).map(p=>+p.avg_confidence);
+ const cnt={};pl.forEach(p=>{const k=lgKey(p.name);cnt[k]=(cnt[k]||0)+1});const nDup=pl.filter(p=>cnt[lgKey(p.name)]>1).length;
+ const perQ=[...Array(n).keys()].map(i=>{let c=0,t=0;took.forEach(p=>{const ch=(p.marks_str||"")[i];if(ch==="c")c++;if(ch==="c"||ch==="x")t++});return {c,t}});
+ const prof=g.collect_profile,av=mean(mk);
+ const rows=pl.map((p,i)=>`<tr class="${sel.has(p.player_id)?"rsel":""}${p.answered?"":" noans"}"><td><input type="checkbox" data-chg="rsel" data-g="${g.id}" data-p="${p.player_id}" ${sel.has(p.player_id)?"checked":""} aria-label="Select ${esc(p.name||"")}"></td><td>${i+1}</td><td>${esc(p.name||"")}${cnt[lgKey(p.name)]>1?' <small class="dupetag">repeated</small>':""}</td><td>${esc(p.research_id||p.student_no||"-")}</td><td>${p.is_guest?"Guest":"Registered"}</td><td>${p.answered}/${n}</td><td><b>${p.marks}</b>/${n}</td><td>${p.answered?Math.round(100*p.marks/(n||1))+"%":"-"}</td><td>${p.score}</td>${g.ask_confidence?`<td>${p.avg_confidence??"-"}</td>`:""}${prof?`<td>${esc(p.g_subject||"-")}</td><td>${esc(p.g_study_level||"-")}</td><td>${p.g_year??"-"}</td><td>${esc(p.g_locality||"-")}</td><td>${esc(p.g_gender||"-")}</td><td>${esc(p.g_native||"-")}</td><td>${p.g_consent==null?"-":p.g_consent?"Yes":"No"}</td>`:""}</tr>`).join("");
+ const cols=9+(g.ask_confidence?1:0)+(prof?7:0);
+ return `<div class="card stack liverun" id="run-${g.id}">
+ <div><b>Live run · ${fmtDT(g.created_at)}</b><div class="muted small">Code ${esc(g.code||"")} · ${g.self_paced?"Own pace":"Together"} · ${g.phase==="ended"?"Finished":"Still running"}${g.host_name?` · hosted by ${esc(g.host_name)}`:""}</div></div>
+ <div class="form-grid rs-stats">
+  <div class="statbox"><b>${pl.length}</b><span>Joined</span></div>
+  <div class="statbox"><b>${took.length}</b><span>Answered at least one question</span></div>
+  <div class="statbox"><b>${av==null?"-":`${fx(av,1)} / ${n}`}</b><span>Average marks of those who answered${av==null?"":` (${Math.round(100*av/(n||1))}%)`}</span></div>
+  <div class="statbox"><b>${mk.length?`${Math.max(...mk)} / ${Math.min(...mk)}`:"-"}</b><span>Highest / lowest marks</span></div>
+  ${conf.length?`<div class="statbox"><b>${fx(mean(conf),1)}</b><span>Average confidence (1-10)</span></div>`:""}
+ </div>
+ ${n?`<details class="rs-perq"><summary><b>Question by question</b> <span class="muted small">% of students who got each question right</span></summary><div style="overflow:auto"><table><thead><tr><th>Question</th>${perQ.map((_,i)=>`<th>Q${i+1}</th>`).join("")}</tr></thead><tbody><tr><th>Right</th>${perQ.map(q=>`<td>${q.t?Math.round(100*q.c/q.t)+"%":"-"}</td>`).join("")}</tr><tr><th>Answered</th>${perQ.map(q=>`<td>${q.t}</td>`).join("")}</tr></tbody></table></div></details>`:""}
+ ${nDup?`<p class="rs-warn">${nDup} rows share a name with another row (marked <b>repeated</b>). Use <b>Select repeated names</b> to pick the extra copies, keeping the one with the most answers.</p>`:""}
+ <div class="actions rs-acts"><span class="muted small">Select:</span><button class="soft" data-act="rsmark" data-g="${g.id}" data-m="all">All</button><button class="soft" data-act="rsmark" data-g="${g.id}" data-m="none">None</button><button class="soft" data-act="rsmark" data-g="${g.id}" data-m="empty">No answers</button>${nDup?`<button class="soft" data-act="rsmark" data-g="${g.id}" data-m="dupe">Repeated names</button>`:""}
+  <button class="outline danger" data-act="rsremove" data-g="${g.id}" id="rsrm-${g.id}" ${sel.size?"":"disabled"}>Remove selected (${sel.size})</button><button class="soft" data-act="rscsv" data-g="${g.id}">Download CSV</button></div>
+ <div style="overflow:auto"><table class="rs-table"><thead><tr><th><span class="sr-only">Select</span></th><th>S.No</th><th>Name</th><th>Roll no. / Research ID</th><th>Type</th><th>Answered</th><th>Marks</th><th>%</th><th>Points</th>${g.ask_confidence?"<th>Confidence (1-10)</th>":""}${prof?"<th>Subject</th><th>Study level</th><th>Year</th><th>Rural/Urban</th><th>Gender</th><th>Native</th><th>Consent</th>":""}</tr></thead>
+ <tbody>${rows||`<tr><td colspan="${cols}" class="muted">Nobody joined this run.</td></tr>`}</tbody></table></div></div>`}
+function rsSync(gid){const sel=RSEL[gid]||new Set(),b=$("rsrm-"+gid);if(b){b.disabled=!sel.size;b.textContent=`Remove selected (${sel.size})`}
+ document.querySelectorAll(`#run-${CSS.escape(gid)} input[data-chg="rsel"]`).forEach(c=>{c.checked=sel.has(c.dataset.p);c.closest("tr")?.classList.toggle("rsel",c.checked)})}
+CHG.rsel=el=>{const sel=RSEL[el.dataset.g]||(RSEL[el.dataset.g]=new Set());el.checked?sel.add(el.dataset.p):sel.delete(el.dataset.p);rsSync(el.dataset.g)};
+Object.assign(ACT,{
+ rsback(){setR({lcat:R().lcat})},
+ rsmark(el){const g=LIVERES[el.dataset.g];if(!g)return;const pl=g.players||[],sel=RSEL[g.id]=new Set(),m=el.dataset.m;
+  if(m==="all")pl.forEach(p=>sel.add(p.player_id));
+  else if(m==="empty")pl.filter(p=>!p.answered).forEach(p=>sel.add(p.player_id));
+  else if(m==="dupe"){const grp={};pl.forEach(p=>(grp[lgKey(p.name)]||(grp[lgKey(p.name)]=[])).push(p));
+   Object.values(grp).filter(x=>x.length>1).forEach(x=>{x.sort((a,b)=>b.answered-a.answered||b.marks-a.marks||b.score-a.score);x.slice(1).forEach(p=>sel.add(p.player_id))})}
+  rsSync(g.id);if(m!=="none"&&!sel.size)toast("Nobody matches that.")},
+ async rsremove(el){const g=LIVERES[el.dataset.g],sel=RSEL[el.dataset.g];if(!g||!sel?.size)return;
+  const names=(g.players||[]).filter(p=>sel.has(p.player_id)).map(p=>p.name||"Player");
+  if(!confirm(`Remove ${sel.size} player(s) from this live run?\n\n${names.slice(0,12).join(", ")}${names.length>12?` and ${names.length-12} more`:""}\n\nTheir answers in this run are deleted. This cannot be undone.`))return;
+  const r=await db.rpc("live_remove_players",{p_game:g.id,p_players:[...sel]});if(r.error)return toast(v16msg(r.error));
+  RSEL[g.id]=new Set();toast(`${r.data} player(s) removed.`);
+  if(LG?.host&&LG.id===g.id){LG.sig=null;await lgPull();if(LG.report)LG.report=await rpc("live_guest_csv",{p_game:g.id})}render()},
+ rscsv(el){const g=LIVERES[el.dataset.g];if(!g)return;const n=g.n||0,pl=lgSortPl(g.players),prof=g.collect_profile;
+  const head=["S.No","Name","Roll no. / Research ID","Type","Answered","Marks","Total","%","Points",...(g.ask_confidence?["Avg confidence (1-10)"]:[]),...(prof?["Subject","Study level","Year","Rural/Urban","Gender","Native","Consent"]:[]),...[...Array(n).keys()].map(i=>`Q${i+1}`)];
+  const lab={c:"Right",x:"Wrong","-":"No answer"};
+  download(`live_results_${String(g.title||"quiz").replace(/[^a-z0-9]+/gi,"_")}_${String(g.created_at||"").slice(0,10)}_${g.code||""}.csv`,"﻿"+[csvLine(head),...pl.map((p,i)=>csvLine([i+1,p.name||"",p.research_id||p.student_no||"",p.is_guest?"Guest":"Registered",p.answered,p.marks,n,p.answered?Math.round(100*p.marks/(n||1)):"",p.score,...(g.ask_confidence?[p.avg_confidence??""]:[]),...(prof?[p.g_subject||"",p.g_study_level||"",p.g_year??"",p.g_locality||"",p.g_gender||"",p.g_native||"",p.g_consent==null?"":p.g_consent?"Yes":"No"]:[]),...[...(p.marks_str||"")].map(ch=>lab[ch]||"")]))].join("\r\n"))}});
 const ctxLabel=c=>c==="pre"?"Before pre-test":c==="post"?"Before post-test":c?.startsWith("int:")?"Before an intervention":"-";
 async function perfPage(){
  const [acts,atts,st]=await Promise.all([ok(db.from("activities").select("id,purpose,kind")),fetchAll("activity_attempts","student_id,activity_id,pct,status,attempt_no"),roster()]);
@@ -1332,7 +1385,7 @@ Object.assign(ACT,{
  lgdatareport(el){setR({lcat:"guestdata",view:"guestreport",gid:el.dataset.id,gkind:el.dataset.k})},
  async libedit(el){await loadED(el.dataset.id);setR({view:"edit",id:el.dataset.id})},
  async libprev(el){await loadED(el.dataset.id);RUN.st=null;setR({view:"preview",id:el.dataset.id})},
- libf(el){setR({f:el.dataset.f})},libres(el){setR({view:"results",id:el.dataset.id})},
+ libf(el){setR({f:el.dataset.f})},libres(el){setR({view:"results",id:el.dataset.id,lcat:R().lcat})},
  async libpub(el){await rpc("set_activity_status",{p_id:el.dataset.id,p_status:el.dataset.s});toast(el.dataset.s==="published"?"Published. Students can now see it in its step.":"Moved back to drafts.");render()},
  async libdup(el){await loadED(el.dataset.id);const d={...ED.data,title:ED.data.title+" (copy)",status:"draft"};await rpc("save_activity",{p_id:null,p_data:d,p_keys:ED.keys});ED=null;toast("Copy saved as a draft.");render()},
  async libdel(el){if(!confirm("Delete this activity and every student result recorded for it? This cannot be undone."))return;await ok(db.from("activities").delete().eq("id",el.dataset.id));toast("Deleted.");render()},
@@ -1495,13 +1548,15 @@ const confBlock=()=>`<div class="conf10">${Array.from({length:10},(_,i)=>`<butto
 function lgQuestion(g,opts={}){const q=g.current;if(!q)return "";const labels=q.type==="tf"?["True","False"]:q.type==="ar"?AR_OPTS:q.options||[];const rv=g.phase==="reveal"?g.reveal:null;const tot=rv?Object.values(rv.counts||{}).reduce((a,b)=>a+b,0):0;
  const stem=q.type==="ar"?`<div class="ar"><b>Assertion (A)</b> ${esc(q.assertion)}</div><div class="ar"><b>Reason (R)</b> ${esc(q.reason)}</div>`:esc(q.q||"");
  const open=opts.play&&!rv&&g.phase==="question"&&!g.paused_at&&lgLeft(g)>0;
+ /* listening questions: the audio script is read aloud on the student's phone (and on the projected screen for the professor) */
+ const sayb=q.say&&!rv?`<div class="saybar"><button type="button" class="soft" data-act="lgsay">▶ Play audio</button><span class="muted small">${opts.play?"Listen, then answer. You can play it again.":"Plays through this computer's speakers."}</span></div>`:"";
  if(q.type==="match"){
-  if(rv)return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><b>${esc(q.right[rv.answer[i]])}</b></div>`).join("")}</div></div>${rv.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`;
+  if(rv)return `<div class="lg-q">${stem}</div>${sayb}<div class="card"><div class="match">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><b>${esc(q.right[rv.answer[i]])}</b></div>`).join("")}</div></div>${rv.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`;
   if(opts.play){const sel=LG.matchSel||(LG.matchSel=Array(q.left.length).fill(null));const done=sel.every(x=>x!=null);
-   return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><select ${open?`data-chg="lgmatchpick"`:"disabled"} data-li="${i}"><option value="">Choose…</option>${q.right.map((r,ri)=>`<option value="${ri}" ${sel[i]===ri?"selected":""}>${esc(r)}</option>`).join("")}</select></div>`).join("")}</div></div><button type="button" class="primary big-btn" ${open?'data-act="lgmatchsend"':""} ${done&&open?"":"disabled"}>${LG.matchSent?"Update my matches":"Submit matches"}</button>${open&&LG.matchSent&&g.ask_confidence&&!LG.confSent?confBlock():""}`}
-  return `<div class="lg-q">${stem}</div><div class="card"><div class="match">${q.left.map(l=>`<div class="mrow"><span>${esc(l)}</span><b>?</b></div>`).join("")}</div></div><p class="muted small">Students match each item on their own phones.</p>`}
+   return `<div class="lg-q">${stem}</div>${sayb}<div class="card"><div class="match">${q.left.map((l,i)=>`<div class="mrow"><span>${esc(l)}</span><select ${open?`data-chg="lgmatchpick"`:"disabled"} data-li="${i}"><option value="">Choose…</option>${q.right.map((r,ri)=>`<option value="${ri}" ${sel[i]===ri?"selected":""}>${esc(r)}</option>`).join("")}</select></div>`).join("")}</div></div><button type="button" class="primary big-btn" ${open?'data-act="lgmatchsend"':""} ${done&&open?"":"disabled"}>${LG.matchSent?"Update my matches":"Submit matches"}</button>${open&&LG.matchSent&&g.ask_confidence&&!LG.confSent?confBlock():""}`}
+  return `<div class="lg-q">${stem}</div>${sayb}<div class="card"><div class="match">${q.left.map(l=>`<div class="mrow"><span>${esc(l)}</span><b>?</b></div>`).join("")}</div></div><p class="muted small">Students match each item on their own phones.</p>`}
  const pk=opts.play?LG.picked:null;
- return `<div class="lg-q">${stem}</div><div class="tiles big t${labels.length}${pk!=null?" settled":""}">${labels.map((o,i)=>{const c=rv?(rv.counts?.[String(i)]||0):0;const cls=rv?(rv.answer===i?" right":" dim"):(pk===i?" picked":pk!=null&&pk>=0?" other":"");
+ return `<div class="lg-q">${stem}</div>${sayb}<div class="tiles big t${labels.length}${pk!=null?" settled":""}">${labels.map((o,i)=>{const c=rv?(rv.counts?.[String(i)]||0):0;const cls=rv?(rv.answer===i?" right":" dim"):(pk===i?" picked":pk!=null&&pk>=0?" other":"");
   return `<button type="button" class="tile c${i%4}${cls}" ${open&&pk!==-1?`data-act="lgpick" data-v="${i}"`:"disabled"}><span>${"ABCD"[i]}</span>${esc(o)}${pk===i&&!rv?'<em class="mine">Your answer</em>':""}${rv?`<em class="cnt">${c}${tot?` · ${Math.round(100*c/tot)}%`:""}</em>`:""}</button>`}).join("")}</div>${open&&pk!=null&&pk>=0&&g.ask_confidence&&!LG.confSent?confBlock():""}${rv?.explanation?`<div class="fb good"><b>Explanation.</b> ${esc(rv.explanation)}</div>`:""}`}
 /* ---------- professor's view: marks, level and the question list ---------- */
 /* marks: one letter per question  c right · x wrong · o answered, still open · - no answer · _ not reached */
@@ -1510,17 +1565,17 @@ function lgLevel(m){if(m==null)return null;const faced=lgCount(m,"cx-");if(!face
  return pct>=75?{k:"adv",t:"Advanced",pct}:pct>=50?{k:"mid",t:"Intermediate",pct}:{k:"beg",t:"Beginner",pct}}
 const lgCell={c:'<td class="m-c" title="Right">✓</td>',x:'<td class="m-x" title="Wrong">✗</td>',o:'<td class="m-o" title="Answered, question still open">•</td>',"-":'<td class="m-n" title="No answer">–</td>',_:'<td class="m-w" title="Not reached yet"></td>'};
 function lgStudents(g,pl){const hasM=pl.some(p=>p.marks!=null);
- const rows=pl.map(p=>{const lv=lgLevel(p.marks),m=p.marks||"";
+ const rows=pl.map((p,ix)=>{const lv=lgLevel(p.marks),m=p.marks||"";
   const prog=g.self_paced?`<td>${p.q_index>=g.n||g.phase==="ended"&&p.q_index>=g.n?"✓ Finished":p.q_started_at?`Q${Math.min(p.q_index+1,g.n)}/${g.n}`:g.phase==="ended"?"—":"Starting…"}<div class="bar"><i style="width:${Math.round(100*Math.min(p.q_index??0,g.n)/g.n)}%"></i></div></td>`:"";
-  return `<tr><td>${esc(p.name||"")}${p.is_guest?' <small class="guesttag">guest</small>':""}</td>${prog}${hasM?`<td>${lgCount(m,"c")}/${lgCount(m,"cxo")}</td>`:""}<td>${p.score}</td>${hasM?`<td><span class="lv lv-${lv.k}">${lv.t}${lv.pct!=null?` · ${lv.pct}%`:""}</span></td>`:""}</tr>`}).join("");
- const cols=1+(g.self_paced?1:0)+(hasM?3:1);
- return `<div class="card lg-progcard"><table class="lg-prog"><thead><tr><th>Student</th>${g.self_paced?"<th>Progress</th>":""}${hasM?"<th title='Right answers / questions tried'>Right / tried</th>":""}<th>Points</th>${hasM?"<th>Level</th>":""}</tr></thead><tbody>${rows||`<tr><td colspan="${cols}" class="muted">Waiting for students…</td></tr>`}</tbody></table>
+  return `<tr><td>${ix+1}</td><td>${esc(p.name||"")}${p.is_guest?' <small class="guesttag">guest</small>':""}</td>${prog}${hasM?`<td>${lgCount(m,"c")}/${lgCount(m,"cxo")}</td>`:""}<td>${p.score}</td>${hasM?`<td><span class="lv lv-${lv.k}">${lv.t}${lv.pct!=null?` · ${lv.pct}%`:""}</span></td>`:""}</tr>`}).join("");
+ const cols=2+(g.self_paced?1:0)+(hasM?3:1);
+ return `<div class="card lg-progcard"><table class="lg-prog"><thead><tr><th>S.No</th><th>Student</th>${g.self_paced?"<th>Progress</th>":""}${hasM?"<th title='Right answers / questions tried'>Right / tried</th>":""}<th>Points</th>${hasM?"<th>Level</th>":""}</tr></thead><tbody>${rows||`<tr><td colspan="${cols}" class="muted">Waiting for students…</td></tr>`}</tbody></table>
  ${hasM?'<p class="muted small lg-legend">Level = right answers out of all questions that have closed for that student, skipped ones included: Advanced 75% and above · Intermediate 50–74% · Beginner below 50%.</p>':'<p class="muted small">Run <b>schema_v15.sql</b> in Supabase to see attempts, correct answers and levels here.</p>'}</div>`}
 function lgGrid(g,pl){if(!pl.length||!pl.some(p=>p.marks!=null))return "";const n=g.n,idx=[...Array(n).keys()];
  const foot=idx.map(i=>{let c=0,f=0;pl.forEach(p=>{const ch=(p.marks||"")[i];if(ch==="c")c++;if("cx-".includes(ch||"_"))f++});return `<td>${f?Math.round(100*c/f)+"%":""}</td>`}).join("");
  const cur=!g.self_paced&&g.phase!=="ended"?g.q_index:-1;
  return `<details class="card lg-gridcard" data-lgd="grid" ${LG.open_grid===false?"":"open"}><summary><b>Question by question</b> <span class="muted small">✓ right · ✗ wrong · • answered (still open) · – no answer</span></summary>
- <div class="lg-gridwrap"><table class="lg-grid"><thead><tr><th>Student</th>${idx.map(i=>`<th class="${i===cur?"cur":""}">Q${i+1}</th>`).join("")}</tr></thead><tbody>${pl.map(p=>`<tr><th>${esc(p.name||"")}</th>${idx.map(i=>lgCell[(p.marks||"")[i]||"_"]).join("")}</tr>`).join("")}</tbody><tfoot><tr><th>Class % right</th>${foot}</tr></tfoot></table></div></details>`}
+ <div class="lg-gridwrap"><table class="lg-grid"><thead><tr><th>Student</th>${idx.map(i=>`<th class="${i===cur?"cur":""}">Q${i+1}</th>`).join("")}</tr></thead><tbody>${pl.map((p,ix)=>`<tr><th>${ix+1}. ${esc(p.name||"")}</th>${idx.map(i=>lgCell[(p.marks||"")[i]||"_"]).join("")}</tr>`).join("")}</tbody><tfoot><tr><th>Class % right</th>${foot}</tr></tfoot></table></div></details>`}
 function lgQBody(q,k,showAns){const a=showAns?k.answer:undefined;const labels=q.type==="tf"?["True","False"]:q.type==="ar"?AR_OPTS:q.options||[];
  const stem=q.type==="ar"?`<div><b>Assertion:</b> ${esc(q.assertion||"")}</div><div><b>Reason:</b> ${esc(q.reason||"")}</div>`:`<div class="lg-qstem">${esc(q.q||"")}</div>`;
  const body=q.type==="match"?`<ul class="lg-qopts">${(q.left||[]).map((l,li)=>`<li class="${showAns?"ok":""}">${esc(l)} → ${showAns?esc((q.right||[])[Array.isArray(a)?a[li]:-1]??"?"):"?"}</li>`).join("")}</ul>${showAns?"":`<p class="muted small">Choices: ${(q.right||[]).map(esc).join(" · ")}</p>`}`
@@ -1543,6 +1598,9 @@ function lgQList(g,pl){const d=LG.qs;if(!d||!Array.isArray(d.questions))return "
  return `<details class="card lg-qlist" data-lgd="qlist" ${LG.open_qlist?"open":""}><summary><b>All ${d.questions.length} questions with answers</b> <span class="muted small">Keep this closed while the screen is projected</span></summary><ol>${items}</ol></details>`}
 const lgPauseBtn=g=>g.paused_at?'<button class="primary big-btn" data-act="lgpause" data-v="0">▶ Resume quiz</button>':'<button class="outline" data-act="lgpause" data-v="1">⏸ Pause</button>';
 const lgPausedBanner=g=>g.paused_at?'<div class="lg-paused" role="status">⏸ Quiz paused. Students cannot answer and every timer is stopped.</div>':"";
+/* names are compared without capitals or spaces: 25uta104 = 25UTA 104 */
+const lgKey=n=>String(n||"").replace(/\s+/g,"").toUpperCase();
+const v16msg=e=>/function|schema cache|PGRST202/i.test(`${e.message} ${e.code}`)?"This needs the database update: run schema_v16.sql in Supabase (SQL Editor).":e.message;
 const lgCodeTiles=g=>`<div class="lg-code">${String(g.code||"").split("").join("<i></i>")}</div>`;
 async function hostPage(){
  if(!LG||LG.id!==R().id){LG={id:R().id,host:true};await lgPull()}
@@ -1550,8 +1608,8 @@ async function hostPage(){
  S.after=()=>{lgLoop();const w=document.querySelector(".lg-gridwrap");if(w&&LG?.gx)w.scrollLeft=LG.gx};const pl=LG.players;
  const mode=`<div class="lg-mode" role="radiogroup" aria-label="How the questions move"><button type="button" role="radio" aria-checked="${!!g.self_paced}" class="${g.self_paced?"on":""}" data-act="lgmode" data-v="1"><b>${g.self_paced?"✓ Selected: ":""}Own pace</b><span>Every student starts from question 1, even if they join late</span></button><button type="button" role="radio" aria-checked="${!g.self_paced}" class="${g.self_paced?"":"on"}" data-act="lgmode" data-v="0"><b>${g.self_paced?"":"✓ Selected: "}Together</b><span>You move the whole class with Next, Pause and Show answer</span></button></div>`;
  if(g.phase==="lobby")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ · ${esc(g.title||"")}</div><p>Students open <b>Join Live</b> on the website and type this code</p>${lgCodeTiles(g)}${mode}
-  <div class="lg-players"><b>${pl.length}</b> joined${pl.length?`<div class="namecloud">${pl.map(p=>`<span>${esc(p.name||"")}</span>`).join("")}</div>`:""}</div><div class="actions"><button class="primary big-btn" data-act="lgstep" data-a="next" ${pl.length?"":"disabled"}>Start quiz</button><button class="outline" data-act="lgstep" data-a="end">Cancel</button></div></div>`;
- if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>Final results</h1>${podium(pl,10)}<div class="actions lg-endact"><button class="primary" data-act="lgclose">Back to My library</button>${g.collect_profile?`<button class="soft" data-act="lgcsv" data-id="${g.id}">Download guest data (CSV)</button>${LG.report?"":`<button class="soft" data-act="lgreport" data-id="${g.id}">View guest data report</button>`}`:""}</div>${g.collect_profile&&LG.report?guestReportHTML(LG.report):""}${lgStudents(g,pl)}${lgGrid(g,pl)}${lgQList(g,pl)}</div><div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`;
+  <div class="lg-players"><b>${pl.length}</b> joined${pl.length?`<div class="namecloud">${[...pl].sort((a,b)=>lgKey(a.name).localeCompare(lgKey(b.name),undefined,{numeric:true})).map(p=>`<span>${esc(p.name||"")}<button type="button" class="nc-x" data-act="lgkick" data-id="${p.player_id}" data-n="${esc(p.name||"")}" title="Remove from this quiz" aria-label="Remove ${esc(p.name||"")}">×</button></span>`).join("")}</div><p class="muted small">Press × to remove someone who should not be in this quiz.</p>`:""}</div><div class="actions"><button class="primary big-btn" data-act="lgstep" data-a="next" ${pl.length?"":"disabled"}>Start quiz</button><button class="outline" data-act="lgstep" data-a="end">Cancel</button></div></div>`;
+ if(g.phase==="ended")return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ FINISHED</div><h1>Final results</h1>${podium(pl,10)}<div class="actions lg-endact"><button class="primary" data-act="lgclose">Back to My library</button><button class="soft" data-act="lgtores" data-id="${g.activity_id}">Full results · remove players</button>${g.collect_profile?`<button class="soft" data-act="lgcsv" data-id="${g.id}">Download guest data (CSV)</button>${LG.report?"":`<button class="soft" data-act="lgreport" data-id="${g.id}">View guest data report</button>`}`:""}</div>${g.collect_profile&&LG.report?guestReportHTML(LG.report,null,g.id):""}${lgStudents(g,pl)}${lgGrid(g,pl)}${lgQList(g,pl)}</div><div class="confetti" aria-hidden="true">${Array.from({length:24},(_,i)=>`<i style="left:${(i*4.2)%100}%;animation-delay:${(i%8)*.15}s;background:${["#6558d3","#13a99b","#f2a33a","#e86a8a"][i%4]}"></i>`).join("")}</div>`;
  if(g.self_paced){const fin=pl.filter(p=>p.q_index>=g.n).length;
   return `<div class="lg-stage"><div class="eyebrow">LIVE QUIZ · OWN PACE · ${esc(g.title||"")}</div><p>Late? Students can still join with this code. They start from question 1.</p>${lgCodeTiles(g)}
   <div class="lg-players"><b>${pl.length}</b> joined · <b>${fin}</b> finished</div>${lgPausedBanner(g)}
@@ -1595,6 +1653,7 @@ function playPage(){
 const joinQuizCard=()=>`<form data-form="lgjoin" class="card stack lg-join"><div class="eyebrow">LIVE QUIZ</div><h3>Join a live quiz</h3><p class="muted small">Type the six-digit code your professor shows on the screen.</p><div class="row"><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="000000" class="codein"><button class="primary">Join</button></div></form>`;
 Object.assign(FORM,{async lgjoin(f,d){const id=await rpc("live_join",{p_code:d.get("code")});LG={id};await lgPull();setR({view:"play",id})}});
 /* Join live page: live quiz codes work for everyone; guests give a name */
+let lgJoining=false; /* a slow network must not turn several presses of Join into several players */
 async function joinLiveQuiz(code){ /* true when the code belonged to a live quiz */
  if(!/^\d{6}$/.test(code))return false;
  const sv=lgSaved();
@@ -1604,10 +1663,10 @@ async function joinLiveQuiz(code){ /* true when the code belonged to a live quiz
  if(user&&role()==="student"){const r=await db.rpc("live_join",{p_code:code});if(r.error){toast(r.error.message);return true}LG={id:r.data};await lgPull();S.page="app";S.tab="live";S.r={view:"play",id:r.data};render();return true}
  const name=($("displayName")?.value||"").trim();
  if(name.length<2){toast(`Found "${look.data.title||"Live quiz"}". Type your name, then press Join again.`);$("displayName")?.focus();return true}
- const doJoin=async det=>{const args={p_code:code,p_name:name};if(det)Object.assign(args,{p_subject:det.subject,p_study_level:det.study_level,p_year:det.year,p_locality:det.locality,p_gender:det.gender,p_native:det.native,p_consent:det.consent});
+ const doJoin=async det=>{if(lgJoining)return;lgJoining=true;try{const args={p_code:code,p_name:name};if(det)Object.assign(args,{p_subject:det.subject,p_study_level:det.study_level,p_year:det.year,p_locality:det.locality,p_gender:det.gender,p_native:det.native,p_consent:det.consent});
   const r=await db.rpc("live_join_guest",args);if(r.error){toast(r.error.message);return}
   LG={id:r.data.game,guest:true,player:r.data.player,token:r.data.token};
-  await lgPull();S={page:"play"};render()};
+  await lgPull();S={page:"play"};render();if(r.data.rejoined)toast(`Welcome back, ${name}. You are in your own place again.`)}finally{lgJoining=false}};
  if(look.data.collect_profile){demoForm(name,doJoin);return true}
  await doJoin(null);return true}
 /* confidence (1-10) bucketed into three bands for the overall report. */
@@ -1615,14 +1674,17 @@ const confBand=v=>v==null?null:v<=3?"Low confidence":v<=7?"Neutral":"High confid
 /* shared "Guest Live Quiz data" report table + overall summary, used on the live-quiz
    ended screen and from the My library > Guest Live Quiz data tab. rows come from the
    live_guest_csv RPC (host-only; exact marks, not the gamified score). */
-function guestReportHTML(rows,total){
+function guestReportHTML(rows,total,gid){
+ rows=lgSortPl(rows);const can=!!gid&&rows.some(r=>r.player_id),sel=can?(RSEL[gid]||(RSEL[gid]=new Set())):null;
+ if(can)LIVERES[gid]={id:gid,players:rows.map(r=>({...r,score:0,answered:r.answered??0,marks:r.marks??0}))};
+ const cnt={};rows.forEach(p=>{const k=lgKey(p.name);cnt[k]=(cnt[k]||0)+1});const nDup=rows.filter(p=>cnt[lgKey(p.name)]>1).length;
  const withConf=rows.filter(r=>r.avg_confidence!=null);
  const bandCounts={"Low confidence":0,"Neutral":0,"High confidence":0};
  withConf.forEach(r=>bandCounts[confBand(r.avg_confidence)]++);
  const avgMarks=rows.length?mean(rows.map(r=>r.marks||0)):0;
  const avgConf=withConf.length?mean(withConf.map(r=>r.avg_confidence)):null;
  const tot=total??rows.find(r=>r.total!=null)?.total;
- return `<div class="card stack" style="margin-top:18px;text-align:left">
+ return `<div class="card stack" style="margin-top:18px;text-align:left"${can?` id="run-${gid}"`:""}>
   <h3>Overall report</h3>
   <div class="form-grid">
    <div class="statbox"><b>${fx(avgMarks,1)}${tot?` / ${tot}`:""}</b><span>Average marks</span></div>
@@ -1632,12 +1694,21 @@ function guestReportHTML(rows,total){
    <div class="statbox"><b>${bandCounts["High confidence"]}</b><span>High confidence (8-10)</span></div>
   </div>
   <h3>Participants (${rows.length})</h3>
-  <div style="overflow:auto"><table><thead><tr><th>Name</th><th>Guest</th><th>Marks</th><th>Subject</th><th>Study level</th><th>Year</th><th>Rural/Urban</th><th>Gender</th><th>Native</th><th>Consent</th><th>Confidence (1-10)</th><th>Band</th></tr></thead><tbody>
-  ${rows.map(p=>`<tr><td>${esc(p.name||"")}</td><td>${p.is_guest?"Yes":"No"}</td><td>${p.marks??"-"}${p.total?` / ${p.total}`:""}</td><td>${esc(p.g_subject||"-")}</td><td>${esc(p.g_study_level||"-")}</td><td>${p.g_year??"-"}</td><td>${esc(p.g_locality||"-")}</td><td>${esc(p.g_gender||"-")}</td><td>${esc(p.g_native||"-")}</td><td>${p.g_consent?"Yes":"No"}</td><td>${p.avg_confidence??"-"}</td><td>${confBand(p.avg_confidence)||"-"}</td></tr>`).join("")||'<tr><td colspan="12" class="muted">No participants yet.</td></tr>'}
+  ${can?`<div class="actions rs-acts"><span class="muted small">Select:</span><button class="soft" data-act="rsmark" data-g="${gid}" data-m="all">All</button><button class="soft" data-act="rsmark" data-g="${gid}" data-m="none">None</button><button class="soft" data-act="rsmark" data-g="${gid}" data-m="empty">No answers</button>${nDup?`<button class="soft" data-act="rsmark" data-g="${gid}" data-m="dupe">Repeated names</button>`:""}<button class="outline danger" data-act="rsremove" data-g="${gid}" id="rsrm-${gid}" ${sel.size?"":"disabled"}>Remove selected (${sel.size})</button></div>`:""}
+  <div style="overflow:auto"><table class="rs-table"><thead><tr>${can?'<th><span class="sr-only">Select</span></th>':""}<th>S.No</th><th>Name</th><th>Guest</th><th>Marks</th><th>Subject</th><th>Study level</th><th>Year</th><th>Rural/Urban</th><th>Gender</th><th>Native</th><th>Consent</th><th>Confidence (1-10)</th><th>Band</th></tr></thead><tbody>
+  ${rows.map((p,i)=>`<tr class="${can&&sel.has(p.player_id)?"rsel":""}">${can?`<td><input type="checkbox" data-chg="rsel" data-g="${gid}" data-p="${p.player_id}" ${sel.has(p.player_id)?"checked":""} aria-label="Select ${esc(p.name||"")}"></td>`:""}<td>${i+1}</td><td>${esc(p.name||"")}${cnt[lgKey(p.name)]>1?' <small class="dupetag">repeated</small>':""}</td><td>${p.is_guest?"Yes":"No"}</td><td>${p.marks??"-"}${p.total?` / ${p.total}`:""}</td><td>${esc(p.g_subject||"-")}</td><td>${esc(p.g_study_level||"-")}</td><td>${p.g_year??"-"}</td><td>${esc(p.g_locality||"-")}</td><td>${esc(p.g_gender||"-")}</td><td>${esc(p.g_native||"-")}</td><td>${p.g_consent?"Yes":"No"}</td><td>${p.avg_confidence??"-"}</td><td>${confBand(p.avg_confidence)||"-"}</td></tr>`).join("")||'<tr><td colspan="14" class="muted">No participants yet.</td></tr>'}
   </tbody></table></div></div>`}
 Object.assign(ACT,{
  async libhost(el){const g=await hostLive({p_activity:el.dataset.id,p_seconds:20,p_self_paced:false});LG={id:g.id,host:true};await lgPull();setR({view:"host",id:g.id})},
  async lgstep(el){if(el.dataset.a==="end"&&!confirm("End this live quiz now?"))return;await rpc("live_step",{p_game:LG.id,p_action:el.dataset.a});await lgPull();if(el.dataset.a==="end"&&LG.game?.q_index<0){stopTimers();LG=null;return setR({})}render()},
+ async rmstudent(el){const nm=el.dataset.n||"this student";
+ if(!confirm(`Remove ${nm}${el.dataset.e?` (${el.dataset.e})`:""} from the website?\n\nThe account is deleted with everything it saved: tests, questionnaires, attendance, live quiz answers and messages. Use this only for someone who is not part of the research. This cannot be undone.`))return;
+ const r=await db.rpc("remove_student",{p_user:el.dataset.id});if(r.error)return toast(v16msg(r.error));toast(`${nm} has been removed.`);render()},
+ async lgkick(el){if(!LG)return;if(!confirm(`Remove ${el.dataset.n||"this player"} from this quiz? Their answers in this quiz are deleted.`))return;
+  const r=await db.rpc("live_remove_players",{p_game:LG.id,p_players:[el.dataset.id]});if(r.error)return toast(v16msg(r.error));LG.sig=null;await lgPull();render();toast("Removed.")},
+ lgtores(el){stopTimers();LG=null;setR({view:"results",id:el.dataset.id,lcat:"general"})},
+ lgsay(){const q=(LG?.host?LG.game:lgEff())?.current;if(!q?.say)return;if(!window.speechSynthesis)return toast("Audio is not supported in this browser. Try Chrome.");
+  const u=new SpeechSynthesisUtterance(q.say);u.lang="en-IN";u.rate=.9;const v=speechSynthesis.getVoices().find(x=>/^en[-_]IN/i.test(x.lang))||speechSynthesis.getVoices().find(x=>/^en/i.test(x.lang));if(v)u.voice=v;speechSynthesis.cancel();speechSynthesis.speak(u)},
  lgqv(el){if(!LG)return;LG.qv=(LG.qv||0)+(+el.dataset.d);LG.qvAns=false;render()},
  lgqvans(){if(!LG)return;LG.qvAns=!LG.qvAns;render()},
  async lgpause(el){const v=el.dataset.v==="1";const r=await db.rpc("live_pause",{p_game:LG.id,p_pause:v});
@@ -1645,8 +1716,8 @@ Object.assign(ACT,{
   await lgPull();render();toast(v?"Quiz paused.":"Quiz resumed.")},
  async lgreport(el){const rows=await rpc("live_guest_csv",{p_game:el.dataset.id});LG.report=rows;render()},
  async lgcsv(el){const gid=el.dataset.id;const rows=await rpc("live_guest_csv",{p_game:gid});
-  download(`live_quiz_guests_${gid.slice(0,8)}.csv`,[csvLine(["Name","Guest","Marks","Total","Subject","Study level","Year","Rural/Urban","Gender","Native","Consent","Avg confidence (1-10)","Confidence band"]),
-   ...rows.map(p=>csvLine([p.name||"",p.is_guest?"Yes":"No",p.marks,p.total,p.g_subject||"",p.g_study_level||"",p.g_year||"",p.g_locality||"",p.g_gender||"",p.g_native||"",p.g_consent?"Yes":"No",p.avg_confidence??"",confBand(p.avg_confidence)||""]))].join("\n"))},
+  download(`live_quiz_guests_${gid.slice(0,8)}.csv`,"\ufeff"+[csvLine(["S.No","Name","Guest","Marks","Total","Subject","Study level","Year","Rural/Urban","Gender","Native","Consent","Avg confidence (1-10)","Confidence band"]),
+   ...lgSortPl(rows).map((p,i)=>csvLine([i+1,p.name||"",p.is_guest?"Yes":"No",p.marks,p.total,p.g_subject||"",p.g_study_level||"",p.g_year||"",p.g_locality||"",p.g_gender||"",p.g_native||"",p.g_consent?"Yes":"No",p.avg_confidence??"",confBand(p.avg_confidence)||""]))].join("\n"))},
  lgclose(){stopTimers();LG=null;setR({})},lgleave(){stopTimers();const g=LG?.guest;LG=null;lgForget();if(g||S.page==="play"){S={page:"join"};render()}else setR({})},
  async lgpick(el){if(!LG)return;const v=+el.dataset.v;if(LG.picked===v)return;LG.picked=v;lgSend(v);try{playFeedbackSound(true)}catch{};render()},
  lgmatchsend(){const sel=LG?.matchSel;if(!sel||sel.some(x=>x==null))return toast("Match every item first.");LG.matchSent=true;lgSend([...sel]);try{playFeedbackSound(true)}catch{};render()},
@@ -2043,7 +2114,9 @@ ACT.confpick=el=>{const v=+el.dataset.v;const cb=CONFPICK;CONFPICK=null;cb?.(v)}
 /* ---------- participants (no login needed) ---------- */
 let PART=null;
 function remember(n){try{sessionStorage.setItem("llc_name",n)}catch{}}
-ACT.lookup=async()=>{
+ACT.lookup=async(el)=>{if(ACT.lookup.busy)return;ACT.lookup.busy=true;const b=el?.tagName==="BUTTON"?el:null;if(b){b.disabled=true;b.dataset.t=b.textContent;b.textContent="Joining…"}
+ try{await lookup0()}finally{ACT.lookup.busy=false;if(b&&b.isConnected){b.disabled=false;b.textContent=b.dataset.t||"Join"}}};
+async function lookup0(){
  const code=($("joinCode")?.value||"").trim();if(!/^\d{6}$/.test(code))return toast("Type the six-digit code.");
  const name=($("displayName")?.value||"").trim();if(name)remember(name);
  if(await joinLiveQuiz(code))return;
@@ -2052,7 +2125,7 @@ ACT.lookup=async()=>{
  if(!user&&name.length<2){$("displayName")?.focus();return toast("Type your name, then press Join.")}
  const begin=det=>{PART={code,x,name:user?(name||profile?.full_name||""):name,skew:new Date(x.server_now).getTime()-Date.now(),sent:0,det};sessionNow={code,activity_type:x.activity_type};partRender()};
  if(x.collect_profile)return demoForm(name,begin);
- begin(null)};
+ begin(null)}
 function partRender(){const P=PART,x=P.x,box=$("participant");if(!box)return;const opt=["poll","quiz"].includes(x.activity_type);
  box.innerHTML=`<div class="pcard-in"><div class="row"><div class="eyebrow">${esc(x.session_title)}</div>${x.ends_at?`<span class="ptimer small"><b id="paSec"></b></span>`:""}</div>${x.ends_at?'<div class="tbar"><i id="paBar"></i></div>':""}
  <div class="question">${esc(x.session_prompt)}</div>

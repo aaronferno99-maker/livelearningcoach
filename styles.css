@@ -686,3 +686,13 @@ body.mood-on.m-night header{background:linear-gradient(120deg,rgba(255,255,255,.
 .lg-playrow{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .lg-codemini{background:#fff;color:#5b6283;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;white-space:nowrap}
 .lg-codemini b{color:#211c58;letter-spacing:.12em;font-size:14px}
+/* v16: Play audio inside the live quiz */
+.lg-stage .saybar{justify-content:center}.lg-stage .saybar .soft{background:#fff;color:#40378e;font-weight:800;padding:10px 18px}.lg-stage .saybar .muted{color:#d5d2f5}
+.namecloud span{display:inline-flex;align-items:center;gap:6px}.namecloud .nc-x{background:rgba(255,255,255,.22);color:#fff;border:0;border-radius:50%;width:20px;height:20px;padding:0;font:700 14px/20px Manrope;cursor:pointer;min-height:0}.namecloud .nc-x:hover{background:#e86a8a}
+/* v16: live quiz results with selection */
+.rs-h{font:800 20px Manrope;margin:22px 0 10px}.liverun{margin-bottom:16px}.rs-stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.rs-acts{flex-wrap:wrap;align-items:center;gap:8px;margin:0}.rs-table td,.rs-table th{white-space:nowrap}.rs-table tr.rsel td{background:#fdecef}.rs-table tr.noans td{color:var(--muted)}
+.rs-table input[type=checkbox]{width:18px;height:18px;min-height:0;margin:0}.dupetag{background:#fde7c7;color:#8a5200;border-radius:8px;padding:1px 6px;font-weight:700}
+.rs-perq summary{cursor:pointer}.rs-perq table td,.rs-perq table th{text-align:center;padding:6px 8px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.rs-warn{margin:0;background:#fff4e0;border:1px solid #f3d29a;color:#7a4a00;border-radius:12px;padding:10px 14px;font-size:14px}
